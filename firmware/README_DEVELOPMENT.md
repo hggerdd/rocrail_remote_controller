@@ -48,6 +48,7 @@ The entry point determines operating mode:
 - `poti_controller.py` - Potentiometer input filtering
 - `wifi_manager.py` - WiFi connection management
 - `interval_timer.py` - Non-blocking timing utilities
+- `neopixel_controller.py` - NeoPixel LED status visualization
 
 ### 🟢 CONFIGURATION Files
 - `rocrail_config.py` - Default settings (WiFi, Rocrail, pins, timing)
@@ -82,7 +83,14 @@ SOUND_BUTTON_PIN = 35     # Sound on/off
 EMERGENCY_BUTTON_PIN = 39 # Emergency stop
 POTI_PIN = 36            # Speed potentiometer
 LED_PIN = 5              # Status LED
+NEOPIXEL_PIN = 2         # 6 NeoPixel LEDs for status
 ```
+
+### NeoPixel Status LEDs (Controller Mode)
+- **LED 0 (WiFi Status)**: 
+  - Red blinking (80% brightness) when disconnected
+  - Green blinking when connected (battery saving)
+- **LED 1-5**: Available for additional status indicators
 
 ## Communication Protocol
 

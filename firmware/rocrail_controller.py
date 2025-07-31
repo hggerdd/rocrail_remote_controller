@@ -10,6 +10,7 @@ from rocrail_config import *
 from interval_timer import IntervalTimer
 from poti_controller import PotiController
 from button_controller import ButtonController
+from neopixel_controller import NeoPixelController
 
 from btn_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL, BTN_GELB, BTN_BLAU, BTN_MITTE_UP, BTN_MITTE_DOWN
 from btn_config import ADC_GESCHWINDIGKEIT
@@ -37,8 +38,10 @@ sound_button = ButtonController(pin_num=BTN_GELB, debounce_ms=5)
 btn_up = ButtonController(pin_num=BTN_MITTE_UP, debounce_ms=5)
 btn_down = ButtonController(pin_num=BTN_MITTE_DOWN, debounce_ms=5)
 
-# define the onboard led
-led = Pin(LED_PIN, Pin.OUT)
+# Initialize NeoPixel controller - turns off all LEDs at startup
+neopixel_ctrl = NeoPixelController(pin_num=NEOPIXEL_PIN, num_leds=NEOPIXEL_COUNT)
+
+
 
 def connect_wifi(ssid, password, max_retries=10):
     global wlan
@@ -159,14 +162,12 @@ def send_poti_value(speed, direction):
     if socket_client:
         try:
             # Format the message according to your protocol
-            led.off()
             message = f'<lc id="BR103" V="{speed}" dir="{direction}"/>'
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
             
             print(message_and_header)
-            led.on()
             
             return True
         except Exception as e:
@@ -179,14 +180,12 @@ def send_light_status(light_on_off):
     
     if socket_client:
         try:
-            led.off()
             message = f'<fn id="{loco_id}" fn0="{light_on_off}"/>'
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
             
             print(message_and_header)
-            led.on()
             
             return True
         except Exception as e:
@@ -202,6 +201,9 @@ if run:
     if connect_wifi(WIFI_SSID, WIFI_PASSWORD):
         print("WiFi connection successful")
         
+        # Set initial WiFi status on LED 1 (green blinking)
+        neopixel_ctrl.wifi_status_led(True, True)
+        
         # initialize the timer for regulare events
         timer = IntervalTimer()
         
@@ -213,6 +215,9 @@ if run:
             last_speed = -1
             speed = 0
             
+            # Initialize WiFi status blinking
+            wifi_blink_toggle = False
+            
             try:
                 # Main program loop
                 while True:
@@ -221,6 +226,11 @@ if run:
                         print("check wifi connection")
                         if not wlan.isconnected():
                             print("!!! wifi not connected --> reconnect")
+                    
+                    # Update WiFi status LED (blinking)
+                    if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
+                        wifi_blink_toggle = not wifi_blink_toggle
+                        neopixel_ctrl.wifi_status_led(wlan.isconnected(), wifi_blink_toggle)
                     
                     # regularly update the poti/button input controller (required to have enough values for mean)
                     if timer.is_ready("send_poti_update", POTI_UPDATE_INTERVAL):
@@ -275,3 +285,5 @@ if run:
                 stop_socket_connection()
     else:
         print("WiFi connection failed")
+        # Show WiFi connection failed on LED 1 (red blinking)
+        neopixel_ctrl.wifi_status_led(False, True)
