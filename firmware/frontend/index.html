@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Configuration</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1 id="title">⚙️ ESP32 Configuration</h1>
+        
+        <div id="device-info" class="info-box"></div>
+        
+        <div id="message" class="message" style="display:none"></div>
+        
+        <!-- WiFi Configuration Section -->
+        <div class="config-section">
+            <h2>📶 WiFi Configuration</h2>
+            
+            <div id="current-wifi-config" class="info-box"></div>
+            
+            <!-- Saved Networks List -->
+            <div class="config-subsection">
+                <h3>💾 Saved Networks (<span id="network-count">0</span>/5) 
+                    <button type="button" onclick="loadSavedNetworks()" class="btn btn-small" style="margin-left: 10px;">🔄 Refresh</button>
+                </h3>
+                <div id="saved-networks-list" class="saved-networks"></div>
+            </div>
+            
+            <!-- Add New Network -->
+            <div class="config-subsection">
+                <h3>➕ Add New Network</h3>
+                <p class="help-text" style="margin-bottom: 15px;">
+                    <strong>How to add:</strong> 1) Select network below → 2) Enter password → 3) Click "Save Network" or "Test & Save"
+                </p>
+                
+                <div id="loading" class="loading" style="display:none">
+                    <div class="spinner"></div>
+                    <span>Scanning networks...</span>
+                </div>
+                
+                <form id="wifi-form">
+                    <div class="form-group">
+                        <label for="ssid">Available Networks:</label>
+                        <select id="ssid">
+                            <option value="">Select network...</option>
+                        </select>
+                        <small class="help-text">Networks sorted by signal strength</small>
+                    </div>
+                    
+                    <div class="form-group" id="custom-group" style="display:none">
+                        <label for="custom-ssid">Custom SSID:</label>
+                        <input type="text" id="custom-ssid" placeholder="Enter network name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" placeholder="WiFi password">
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="button" id="save-wifi-btn" class="btn">💾 Save Network</button>
+                        <button type="button" id="test-wifi-btn" class="btn btn-test">🔍 Test & Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Rocrail Configuration Section -->
+        <div class="config-section">
+            <h2>🚂 Rocrail Server Configuration</h2>
+            
+            <div id="current-rocrail-config" class="info-box"></div>
+            
+            <form id="rocrail-form">
+                <div class="form-group">
+                    <label for="rocrail-ip">Server IP Address:</label>
+                    <input type="text" id="rocrail-ip" placeholder="192.168.1.100" pattern="^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$">
+                    <small class="help-text">Enter the IP address of your Rocrail server (e.g., 192.168.1.100)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="rocrail-port">Server Port:</label>
+                    <input type="number" id="rocrail-port" placeholder="8051" min="1" max="65535" value="8051">
+                    <small class="help-text">Default Rocrail port is 8051</small>
+                </div>
+                
+                <div class="button-group">
+                    <button type="button" id="save-rocrail-btn" class="btn">💾 Save Rocrail Settings</button>
+                    <button type="button" id="clear-rocrail-btn" class="btn btn-warning">🗑️ Clear Settings</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- System Actions -->
+        <div class="config-section">
+            <h2>🔧 System Actions</h2>
+            <div class="button-group">
+                <button type="button" id="refresh-btn" class="btn btn-secondary">🔄 Refresh Networks</button>
+                <button type="button" id="forget-wifi-btn" class="btn btn-warning">🗑️ Forget All WiFi</button>
+                <button type="button" id="restart-btn" class="btn btn-danger">🚀 Restart Device</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
