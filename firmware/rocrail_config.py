@@ -20,8 +20,8 @@ BUTTON_CHECK_INTERVAL = 10
 SPEED_UPDATE_INTERVAL = 333
 
 # Hardware pins
-LED_PIN = 5
 POTI_PIN = 36
+NEOPIXEL_PIN = 5  # Pin for 6 NeoPixel LEDs
 
 # Button pins
 LIGHT_BUTTON_PIN = 34    # Beleuchtung ein/aus
@@ -33,3 +33,7 @@ EMERGENCY_BUTTON_PIN = 39  # Nothalt für die gewählte Lok
 # Potentiometer settings
 POTI_FILTER_SIZE = 3
 POTI_THRESHOLD = 1
+
+# NeoPixel settings
+NEOPIXEL_COUNT = 6
+NEOPIXEL_BLINK_INTERVAL = 500  # ms for blinking effect
