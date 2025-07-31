@@ -37,8 +37,7 @@ sound_button = ButtonController(pin_num=BTN_GELB, debounce_ms=5)
 btn_up = ButtonController(pin_num=BTN_MITTE_UP, debounce_ms=5)
 btn_down = ButtonController(pin_num=BTN_MITTE_DOWN, debounce_ms=5)
 
-# define the onboard led
-led = Pin(LED_PIN, Pin.OUT)
+
 
 def connect_wifi(ssid, password, max_retries=10):
     global wlan
@@ -159,14 +158,12 @@ def send_poti_value(speed, direction):
     if socket_client:
         try:
             # Format the message according to your protocol
-            led.off()
             message = f'<lc id="BR103" V="{speed}" dir="{direction}"/>'
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
             
             print(message_and_header)
-            led.on()
             
             return True
         except Exception as e:
@@ -179,14 +176,12 @@ def send_light_status(light_on_off):
     
     if socket_client:
         try:
-            led.off()
             message = f'<fn id="{loco_id}" fn0="{light_on_off}"/>'
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
             
             print(message_and_header)
-            led.on()
             
             return True
         except Exception as e:
