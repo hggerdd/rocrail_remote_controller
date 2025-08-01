@@ -183,42 +183,55 @@ class LocoList:
                     print(f"Last 200 chars: {xml_response[-200:]}")
                 print("-"*50)
             
-            # Simple XML parsing for locomotive entries
-            import re
-            
-            old_count = len(self.locomotives)
+            # Simple string-based parsing (no regex needed)
             locomotives_found = []
             
-            # Find all locomotive entries with various patterns
-            patterns = [
-                (r'<lc\s+id="([^"]+)"[^>]*>', 'lc id pattern'),
-                (r'id="([^"]+)"[^>]*(?:/>|>)', 'general id pattern'),
-                (r'locomotive[^>]*id="([^"]+)"', 'locomotive id pattern'),
-                (r'<lc[^>]*id="([^"]+)"[^>]*', 'lc element pattern')
-            ]
+            # Look for locomotive entries using string methods
+            # Pattern 1: <lc id="..." - most common
+            text = xml_response
+            start_pos = 0
+            while True:
+                # Find <lc id=" pattern
+                lc_pos = text.find('<lc ', start_pos)
+                if lc_pos == -1:
+                    break
+                    
+                # Find id=" after the <lc
+                id_pos = text.find('id="', lc_pos)
+                if id_pos == -1:
+                    start_pos = lc_pos + 4
+                    continue
+                    
+                # Find the end quote
+                id_start = id_pos + 4
+                id_end = text.find('"', id_start)
+                if id_end == -1:
+                    start_pos = lc_pos + 4
+                    continue
+                
+                # Extract locomotive ID
+                loco_id = text[id_start:id_end].strip()
+                if loco_id:
+                    locomotives_found.append(loco_id)
+                    if 'lclist' in xml_response.lower():
+                        print(f"Found locomotive: {loco_id}")
+                
+                start_pos = id_end
             
-            for pattern, name in patterns:
-                matches = re.findall(pattern, xml_response)
-                if matches and 'lclist' in xml_response.lower():
-                    print(f"{name}: Found {len(matches)} matches: {matches}")
-                locomotives_found.extend(matches)
-            
-            # Remove duplicates and filter valid locomotive IDs
+            # Filter out duplicates and invalid entries
             unique_locomotives = []
             for loco_id in locomotives_found:
-                loco_id = loco_id.strip()
-                # Filter out obvious non-locomotive entries
                 if (loco_id and 
                     len(loco_id) > 0 and 
                     loco_id not in unique_locomotives and
                     not loco_id.startswith('xml') and
                     not loco_id.startswith('query') and
                     not loco_id.startswith('model') and
-                    (not loco_id.isdigit() or len(loco_id) > 3)):
+                    loco_id != 'model'):  # Filter out system entries
                     unique_locomotives.append(loco_id)
             
             if unique_locomotives:
-                print(f"Found locomotives: {unique_locomotives}")
+                print(f"Valid locomotives found: {unique_locomotives}")
                 
                 # Clear existing list only if we found substantial new data
                 if len(unique_locomotives) > len(self.locomotives):
@@ -243,7 +256,7 @@ class LocoList:
                     return False
             else:
                 if 'lclist' in xml_response.lower():
-                    print("No locomotive patterns found in lclist response")
+                    print("No locomotive IDs found in lclist response")
                 return False
                 
         except Exception as e:
