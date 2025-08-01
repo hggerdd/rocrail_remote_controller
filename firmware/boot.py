@@ -34,7 +34,6 @@ green_button = Pin(BTN_RICHTUNGSWECHEL, Pin.IN, Pin.PULL_UP)
 # Small delay to allow button state to stabilize
 for i in range(5):
 #     time.sleep_ms(200
-)
     print(f"{5-i}...")
     time.sleep(1)
 

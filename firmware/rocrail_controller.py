@@ -1,7 +1,6 @@
 import network
 import time
 import socket
-import select
 import _thread
 import machine
 from machine import Pin
@@ -86,28 +85,28 @@ def connect_wifi(ssid, password, max_retries=10):
 def socket_listener():
     global socket_client, data_callback, running
     
-    poller = select.poll()
-    poller.register(socket_client, select.POLLIN)
-    
-    buffer_size = 4096
-    
     print("Socket listener started")
     
     while running:
-        if poller.poll(100):  # Poll with 100ms timeout
-            try:
-                data = socket_client.recv(buffer_size)
-                if data:
-                    # Process data in the callback function
-                    if data_callback:
-                        data_callback(data)
-                else:
-                    # Connection closed by the server
-                    print("Connection closed by server")
-                    break
-            except Exception as e:
-                print(f"Socket error: {e}")
+        try:
+            # Simple blocking read with short timeout
+            socket_client.settimeout(0.1)  # 100ms timeout
+            data = socket_client.recv(1024)
+            if data:
+                # Process data in the callback function
+                if data_callback:
+                    data_callback(data)
+            else:
+                # Connection closed by the server
+                print("Connection closed by server")
                 break
+                
+        except OSError:
+            # Timeout or other socket error - just continue
+            continue
+        except Exception as e:
+            print(f"Socket listener error: {e}")
+            break
     
     print("Socket listener stopped")
 
@@ -123,10 +122,10 @@ def start_socket_connection(host, port, callback_function):
     global socket_client, data_callback, running
     
     try:
-        # Create socket
-        socket_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Create socket (simple MicroPython way)
+        socket_client = socket.socket()
+        print(f"Connecting to {host}:{port}...")
         socket_client.connect((host, port))
-        socket_client.setblocking(False)  # Non-blocking mode
         
         # Set callback function
         data_callback = callback_function
@@ -140,6 +139,12 @@ def start_socket_connection(host, port, callback_function):
         
     except Exception as e:
         print(f"Connection error: {e}")
+        if socket_client:
+            try:
+                socket_client.close()
+            except:
+                pass
+            socket_client = None
         return False
 
 def stop_socket_connection():
@@ -163,8 +168,8 @@ def handle_data(data):
     # Accumulate XML data in buffer
     xml_buffer += data_str
     
-    # Check for locomotive data in response (regardless of current list state)
-    if '<lc ' in xml_buffer:
+    # Check for locomotive data in response (look for lclist response and lc entries)
+    if ('<lc ' in xml_buffer or 'lclist' in xml_buffer.lower()):
         print("Found locomotive data in response")
         
         # Process locomotive data if we have any
@@ -174,16 +179,14 @@ def handle_data(data):
             locomotive_query_pending = False
             locomotive_query_start_time = 0
     
-    # Check for specific RocRail response patterns
-    if '</xmlh>' in xml_buffer or 'RocRail' in xml_buffer:
-        # This looks like a complete response, process for locomotives
-        if locomotive_query_pending and ('<lc ' in xml_buffer or 'locomotive' in xml_buffer.lower()):
-            print("Processing locomotive query response...")
-            if loco_list.update_from_rocrail_response(xml_buffer):
-                print("Locomotives found and updated!")
-                update_locomotive_display()
-            locomotive_query_pending = False
-            locomotive_query_start_time = 0
+    # Check for complete model response (lclist command response)
+    if locomotive_query_pending and ('</model>' in xml_buffer or '</xmlh>' in xml_buffer):
+        print("Processing locomotive list response...")
+        if loco_list.update_from_rocrail_response(xml_buffer):
+            print("Locomotives found and updated!")
+            update_locomotive_display()
+        locomotive_query_pending = False
+        locomotive_query_start_time = 0
     
     # Prevent buffer from growing too large
     if len(xml_buffer) > 8192:  # 8KB limit
@@ -240,22 +243,22 @@ def send_light_status(light_on_off):
     return False
 
 def query_locomotives():
-    """Query all locomotives from RocRail server"""
+    """Query all locomotives from RocRail server using specific locomotive list command"""
     global socket_client, locomotive_query_pending, locomotive_query_start_time
     
     if socket_client:
         try:
-            # Send query command to get all locomotives
-            message = '<query/>'
+            # Send specific locomotive list command (as used in other programs)
+            message = '<model cmd="lclist"/>'
             message_len = len(message)
-            message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
+            message_and_header = f'<xmlh><xml size="{message_len}" name="model"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
             
             # Set flag to indicate we're expecting locomotive data
             locomotive_query_pending = True
             locomotive_query_start_time = time.ticks_ms()
             
-            print("Querying locomotives from RocRail...")
+            print("Querying locomotives from RocRail (specific lclist command)...")
             print(message_and_header)
             
             return True
