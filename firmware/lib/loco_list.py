@@ -170,7 +170,14 @@ class LocoList:
             True if locomotives were updated, False otherwise
         """
         try:
-            print(f"Parsing XML response: {xml_response[:200]}...")  # Show first 200 chars
+            print("="*50)
+            print("LOCOMOTIVE LIST PARSING DEBUG")
+            print("="*50)
+            print(f"XML Response Length: {len(xml_response)} characters")
+            print(f"First 500 chars: {xml_response[:500]}")
+            if len(xml_response) > 500:
+                print(f"Last 200 chars: {xml_response[-200:]}")
+            print("-"*50)
             
             # Simple XML parsing for locomotive entries
             # Look for <lc id="..." patterns
@@ -179,40 +186,64 @@ class LocoList:
             old_count = len(self.locomotives)
             locomotives_found = []
             
-            # Find all locomotive entries with various patterns
+            print("SEARCHING FOR LOCOMOTIVE PATTERNS...")
+            
             # Pattern 1: <lc id="locomotivename" ...>
             lc_pattern1 = r'<lc\s+id="([^"]+)"[^>]*>'
             matches1 = re.findall(lc_pattern1, xml_response, re.IGNORECASE)
+            print(f"Pattern 1 '<lc id=\"...\">': Found {len(matches1)} matches: {matches1}")
             locomotives_found.extend(matches1)
             
             # Pattern 2: id="locomotivename" (anywhere in lc tag)
             lc_pattern2 = r'id="([^"]+)"[^>]*(?:/>|>)'
             matches2 = re.findall(lc_pattern2, xml_response, re.IGNORECASE)
+            print(f"Pattern 2 'id=\"...\"': Found {len(matches2)} matches: {matches2}")
             locomotives_found.extend(matches2)
             
             # Pattern 3: Look for locomotive names in different XML structures
             # Some RocRail responses might use different formats
             loco_pattern3 = r'locomotive[^>]*id="([^"]+)"'
             matches3 = re.findall(loco_pattern3, xml_response, re.IGNORECASE)
+            print(f"Pattern 3 'locomotive id=\"...\"': Found {len(matches3)} matches: {matches3}")
             locomotives_found.extend(matches3)
+            
+            # Pattern 4: Look for model elements (lclist response format)
+            model_pattern = r'<lc[^>]*id="([^"]+)"[^>]*'
+            matches4 = re.findall(model_pattern, xml_response, re.IGNORECASE)
+            print(f"Pattern 4 '<lc...id=\"...\">': Found {len(matches4)} matches: {matches4}")
+            locomotives_found.extend(matches4)
+            
+            print(f"Total raw matches found: {len(locomotives_found)}")
+            print(f"Raw locomotive IDs: {locomotives_found}")
+            print("-"*50)
             
             # Remove duplicates and filter valid locomotive IDs
             unique_locomotives = []
             for loco_id in locomotives_found:
                 loco_id = loco_id.strip()
+                print(f"Processing locomotive ID: '{loco_id}'")
+                
                 # Filter out obvious non-locomotive entries
                 if (loco_id and 
                     len(loco_id) > 0 and 
                     loco_id not in unique_locomotives and
                     not loco_id.startswith('xml') and
                     not loco_id.startswith('query') and
-                    not loco_id.isdigit() or len(loco_id) > 3):  # Allow digits if longer than 3 chars
+                    not loco_id.startswith('model') and
+                    (not loco_id.isdigit() or len(loco_id) > 3)):  # Allow digits if longer than 3 chars
                     unique_locomotives.append(loco_id)
+                    print(f"  ✓ Added: '{loco_id}'")
+                else:
+                    print(f"  ✗ Filtered out: '{loco_id}'")
             
-            print(f"Found potential locomotives: {unique_locomotives}")
+            print(f"Filtered unique locomotives: {unique_locomotives}")
+            print("-"*50)
             
             # Add locomotives if we found any new ones
             if unique_locomotives:
+                print(f"Current locomotive count: {len(self.locomotives)}")
+                print(f"Found locomotive count: {len(unique_locomotives)}")
+                
                 # Clear existing list only if we found substantial new data
                 if len(unique_locomotives) > len(self.locomotives):
                     print("Found more locomotives, updating list...")
@@ -223,24 +254,31 @@ class LocoList:
                 for loco_id in unique_locomotives:
                     if self.add_locomotive(loco_id):
                         added += 1
-                        print(f"Added locomotive: {loco_id}")
+                        print(f"✓ Added locomotive: {loco_id}")
                         if added >= self.max_locos:
+                            print(f"Reached maximum locomotive limit ({self.max_locos})")
                             break
+                    else:
+                        print(f"✗ Failed to add locomotive: {loco_id}")
                 
                 # Save updated list if we added any
                 if added > 0:
                     self.save_to_file()
-                    print(f"Updated locomotive list: {added} locomotives added, total: {len(self.locomotives)}")
+                    print(f"*** SUCCESS: Updated locomotive list: {added} locomotives added, total: {len(self.locomotives)} ***")
+                    print("="*50)
                     return True
                 else:
-                    print("No new locomotives added (might already exist in list)")
+                    print("*** NO NEW LOCOMOTIVES ADDED (might already exist in list) ***")
+                    print("="*50)
                     return False
             else:
-                print("No locomotive patterns found in XML response")
+                print("*** NO LOCOMOTIVE PATTERNS FOUND IN XML RESPONSE ***")
+                print("="*50)
                 return False
                 
         except Exception as e:
-            print(f"Error parsing RocRail response: {e}")
+            print(f"*** ERROR PARSING ROCRAIL RESPONSE: {e} ***")
+            print("="*50)
             return False
         finally:
             gc.collect()
