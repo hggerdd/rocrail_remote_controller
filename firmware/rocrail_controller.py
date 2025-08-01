@@ -90,22 +90,17 @@ def socket_listener():
     
     while running:
         try:
-            data = socket_client.recv(4096)
+            data = socket_client.recv(1024)  # Back to original 1024 bytes
             if data:
                 if data_callback:
-                    try:
-                        data_callback(data)
-                    except Exception as e:
-                        print(f"Callback error: {e}")
+                    data_callback(data)
             else:
                 print("Connection closed by server")
                 break
         except:
             # Any socket error - continue with small delay
-            pass
-        
-        # Small delay to prevent CPU hogging
-        time.sleep(0.01)
+            time.sleep(0.01)
+            continue
     
     print("Socket listener stopped")
 
@@ -275,11 +270,13 @@ def handle_locomotive_selection():
     if btn_up.is_pressed():
         if loco_list.select_next():
             selection_changed = True
+            print("Selected next locomotive")
     
     # Handle DOWN button (previous locomotive)
     if btn_down.is_pressed():
         if loco_list.select_previous():
             selection_changed = True
+            print("Selected previous locomotive")
     
     # Update display if selection changed
     if selection_changed:
@@ -345,8 +342,9 @@ if run:
                             locomotive_query_start_time = 0
                     
                     if timer.is_ready("check_wifi_update", WIFI_CHECK_INTERVAL):
+                        print("check wifi connection")
                         if not wlan.isconnected():
-                            print("WiFi disconnected - attempting reconnect")
+                            print("!!! wifi not connected --> reconnect")
                     
                     # Update WiFi status LED (blinking)
                     if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
@@ -356,13 +354,6 @@ if run:
                     # Handle locomotive selection buttons
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
                         handle_locomotive_selection()
-                    
-                    # Check for locomotive query timeout (only if still loading locomotives)
-                    if not locomotives_loaded and locomotive_query_pending and locomotive_query_start_time > 0:
-                        if time.ticks_diff(time.ticks_ms(), locomotive_query_start_time) > LOCO_QUERY_TIMEOUT:
-                            print("Locomotive query timeout")
-                            locomotive_query_pending = False
-                            locomotive_query_start_time = 0
                     
                     # Query locomotives periodically only if we haven't loaded them yet
                     if not locomotives_loaded and timer.is_ready("query_locomotives", LOCO_QUERY_INTERVAL):
@@ -405,10 +396,12 @@ if run:
                     if timer.is_ready("update_speed", SPEED_UPDATE_INTERVAL):
                         if sending_speed_enabled:
                             if (speed != last_speed):
+                                print(f"Speed: {speed} (enabled: {sending_speed_enabled})")
                                 send_poti_value(speed, loco_dir)
                                 last_speed = speed
                         else:
                             if speed == 0:
+                                print("Speed sending re-enabled")
                                 sending_speed_enabled = True                       
                     
                     # Small delay to prevent CPU hogging
