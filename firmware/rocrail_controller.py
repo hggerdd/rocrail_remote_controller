@@ -89,7 +89,7 @@ def socket_listener():
     
     while running:
         try:
-            data = socket_client.recv(1024)
+            data = socket_client.recv(4096)
             if data:
                 if data_callback:
                     try:
