@@ -23,6 +23,7 @@
 
 
 from machine import Pin
+import sys
 import time
 from btn_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL
 
@@ -31,7 +32,10 @@ red_button   = Pin(BTN_NOTHALT, Pin.IN, Pin.PULL_UP)
 green_button = Pin(BTN_RICHTUNGSWECHEL, Pin.IN, Pin.PULL_UP)
 
 # Small delay to allow button state to stabilize
-time.sleep_ms(100)
+for i in range(5):
+#     time.sleep_ms(200)
+    print(f"{5-i}...")
+    time.sleep(1)
 
 # Check if button is pressed (LOW when using pull-up)
 if not red_button.value():
@@ -49,12 +53,13 @@ if not red_button.value():
         
 elif not red_button.value():
     print("\n\nGreen Button pressed - Test program started")
-
 else:
     print("\n\nNormal startup - Running main program...")
     try:
         import rocrail_controller
     except ImportError:
         print("Error: rocrail_controller.py not found!")
+    
     except Exception as e:
         print(f"Error running main rocrail_controller.py: {e}")
+
