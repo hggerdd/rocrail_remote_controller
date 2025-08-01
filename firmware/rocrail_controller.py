@@ -89,24 +89,22 @@ def socket_listener():
     
     while running:
         try:
-            # Simple blocking read with short timeout
-            socket_client.settimeout(0.1)  # 100ms timeout
             data = socket_client.recv(1024)
             if data:
-                # Process data in the callback function
                 if data_callback:
-                    data_callback(data)
+                    try:
+                        data_callback(data)
+                    except Exception as e:
+                        print(f"Callback error: {e}")
             else:
-                # Connection closed by the server
                 print("Connection closed by server")
                 break
-                
-        except OSError:
-            # Timeout or other socket error - just continue
-            continue
-        except Exception as e:
-            print(f"Socket listener error: {e}")
-            break
+        except:
+            # Any socket error - continue with small delay
+            pass
+        
+        # Small delay to prevent CPU hogging
+        time.sleep(0.01)
     
     print("Socket listener stopped")
 
@@ -162,7 +160,11 @@ def handle_data(data):
     """Callback function for processing received data"""
     global xml_buffer, locomotive_query_pending, locomotive_query_start_time
     
-    data_str = data.decode('utf-8', errors='ignore')
+    # Simple decode without keyword arguments for MicroPython compatibility
+    try:
+        data_str = data.decode('utf-8')
+    except:
+        data_str = str(data)  # Fallback if decode fails
     
     # DETAILED DEBUG PRINTING
     print("="*60)
@@ -200,9 +202,9 @@ def handle_data(data):
     
     for pattern, description in patterns:
         if pattern in xml_buffer.lower():
-            print(f"  ✓ Found: {pattern} ({description})")
+            print(f"  + Found: {pattern} ({description})")
         else:
-            print(f"  ✗ Missing: {pattern} ({description})")
+            print(f"  - Missing: {pattern} ({description})")
     print("-"*60)
     
     # Check for locomotive data in response (look for lclist response and lc entries)

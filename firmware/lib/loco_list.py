@@ -190,26 +190,26 @@ class LocoList:
             
             # Pattern 1: <lc id="locomotivename" ...>
             lc_pattern1 = r'<lc\s+id="([^"]+)"[^>]*>'
-            matches1 = re.findall(lc_pattern1, xml_response, re.IGNORECASE)
+            matches1 = re.findall(lc_pattern1, xml_response)
             print(f"Pattern 1 '<lc id=\"...\">': Found {len(matches1)} matches: {matches1}")
             locomotives_found.extend(matches1)
             
             # Pattern 2: id="locomotivename" (anywhere in lc tag)
             lc_pattern2 = r'id="([^"]+)"[^>]*(?:/>|>)'
-            matches2 = re.findall(lc_pattern2, xml_response, re.IGNORECASE)
+            matches2 = re.findall(lc_pattern2, xml_response)
             print(f"Pattern 2 'id=\"...\"': Found {len(matches2)} matches: {matches2}")
             locomotives_found.extend(matches2)
             
             # Pattern 3: Look for locomotive names in different XML structures
             # Some RocRail responses might use different formats
             loco_pattern3 = r'locomotive[^>]*id="([^"]+)"'
-            matches3 = re.findall(loco_pattern3, xml_response, re.IGNORECASE)
+            matches3 = re.findall(loco_pattern3, xml_response)
             print(f"Pattern 3 'locomotive id=\"...\"': Found {len(matches3)} matches: {matches3}")
             locomotives_found.extend(matches3)
             
             # Pattern 4: Look for model elements (lclist response format)
             model_pattern = r'<lc[^>]*id="([^"]+)"[^>]*'
-            matches4 = re.findall(model_pattern, xml_response, re.IGNORECASE)
+            matches4 = re.findall(model_pattern, xml_response)
             print(f"Pattern 4 '<lc...id=\"...\">': Found {len(matches4)} matches: {matches4}")
             locomotives_found.extend(matches4)
             
