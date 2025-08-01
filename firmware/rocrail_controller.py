@@ -166,80 +166,52 @@ def handle_data(data):
     except:
         data_str = str(data)  # Fallback if decode fails
     
-    # DETAILED DEBUG PRINTING
-    print("="*60)
-    print(f"RAW DATA RECEIVED ({len(data)} bytes):")
-    print(f"'{data_str}'")
-    print("="*60)
-    
     # Accumulate XML data in buffer
     xml_buffer += data_str
     
-    print(f"ACCUMULATED BUFFER ({len(xml_buffer)} bytes):")
-    print(f"'{xml_buffer}'")
-    print("-"*60)
-    
-    # Show locomotive query status
-    print(f"LOCOMOTIVE QUERY STATUS:")
-    print(f"  - locomotive_query_pending: {locomotive_query_pending}")
-    print(f"  - locomotive_query_start_time: {locomotive_query_start_time}")
-    if locomotive_query_pending and locomotive_query_start_time > 0:
-        elapsed = time.ticks_diff(time.ticks_ms(), locomotive_query_start_time)
-        print(f"  - elapsed time: {elapsed}ms")
-    print("-"*60)
-    
-    # Check what patterns we find
-    print("PATTERN ANALYSIS:")
-    patterns = [
-        ('<lc ', 'locomotive entry'),
-        ('lclist', 'locomotive list command'),
-        ('</model>', 'model end tag'),
-        ('</xmlh>', 'xml header end'),
-        ('<model', 'model start tag'),
-        ('cmd=', 'command attribute'),
-        ('id=', 'id attribute')
-    ]
-    
-    for pattern, description in patterns:
-        if pattern in xml_buffer.lower():
-            print(f"  + Found: {pattern} ({description})")
-        else:
-            print(f"  - Missing: {pattern} ({description})")
-    print("-"*60)
-    
-    # Check for locomotive data in response (look for lclist response and lc entries)
-    if ('<lc ' in xml_buffer or 'lclist' in xml_buffer.lower()):
-        print("*** FOUND LOCOMOTIVE DATA - PROCESSING ***")
+    # Only show detailed logging if we find locomotive list data
+    if 'lclist' in xml_buffer.lower():
+        print("="*60)
+        print("LOCOMOTIVE LIST RESPONSE DETECTED!")
+        print("="*60)
+        print(f"RAW DATA: {data_str}")
+        print("-"*60)
+        print(f"BUFFER CONTENT: {xml_buffer}")
+        print("-"*60)
         
-        # Process locomotive data if we have any
+        # Process locomotive data
+        print("*** PROCESSING LOCOMOTIVE LIST ***")
         if loco_list.update_from_rocrail_response(xml_buffer):
-            print("*** LOCOMOTIVE LIST UPDATED FROM RESPONSE ***")
+            print("*** LOCOMOTIVE LIST UPDATED SUCCESSFULLY ***")
             update_locomotive_display()
             locomotive_query_pending = False
             locomotive_query_start_time = 0
         else:
-            print("*** LOCOMOTIVE DATA FOUND BUT PARSING FAILED ***")
+            print("*** LOCOMOTIVE LIST PARSING FAILED ***")
+        
+        print("="*60)
+    
+    # Check for locomotive data in other formats (minimal logging)
+    elif '<lc ' in xml_buffer:
+        print("Found locomotive data in response - processing...")
+        if loco_list.update_from_rocrail_response(xml_buffer):
+            print("Locomotive list updated")
+            update_locomotive_display()
+            locomotive_query_pending = False
+            locomotive_query_start_time = 0
     
     # Check for complete model response (lclist command response)
-    if locomotive_query_pending and ('</model>' in xml_buffer or '</xmlh>' in xml_buffer):
-        print("*** PROCESSING LOCOMOTIVE LIST RESPONSE ***")
+    elif locomotive_query_pending and ('</model>' in xml_buffer or '</xmlh>' in xml_buffer):
+        print("Processing locomotive query response...")
         if loco_list.update_from_rocrail_response(xml_buffer):
-            print("*** LOCOMOTIVES FOUND AND UPDATED! ***")
+            print("Locomotives found and updated!")
             update_locomotive_display()
-        else:
-            print("*** RESPONSE PROCESSING FAILED ***")
         locomotive_query_pending = False
         locomotive_query_start_time = 0
     
     # Prevent buffer from growing too large
     if len(xml_buffer) > 8192:  # 8KB limit
-        print("*** TRIMMING XML BUFFER TO PREVENT MEMORY ISSUES ***")
-        # Keep only the last 4KB
-        xml_buffer = xml_buffer[-4096:]
-        print(f"Buffer trimmed to {len(xml_buffer)} bytes")
-    
-    print("="*60)
-    print()  # Empty line for readability
+        xml_buffer = xml_buffer[-4096:]  # Keep only the last 4KB
 
 def send_poti_value(speed, direction):
     """Send potentiometer value through the socket connection in Rocrail RCP XML format to set the speed of the selected locomotive"""
