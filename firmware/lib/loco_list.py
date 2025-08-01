@@ -170,24 +170,11 @@ class LocoList:
             True if locomotives were updated, False otherwise
         """
         try:
-            # Only show detailed parsing if we find lclist
-            if 'lclist' in xml_response.lower():
-                print("="*50)
-                print("PARSING LOCOMOTIVE LIST RESPONSE")
-                print("="*50)
-                print(f"Response length: {len(xml_response)} chars")
-                if len(xml_response) < 1000:
-                    print(f"Full response: {xml_response}")
-                else:
-                    print(f"First 500 chars: {xml_response[:500]}")
-                    print(f"Last 200 chars: {xml_response[-200:]}")
-                print("-"*50)
-            
             # Simple string-based parsing (no regex needed)
             locomotives_found = []
             
             # Look for locomotive entries using string methods
-            # Pattern 1: <lc id="..." - most common
+            # Pattern: <lc id="..." - most common
             text = xml_response
             start_pos = 0
             while True:
@@ -213,8 +200,6 @@ class LocoList:
                 loco_id = text[id_start:id_end].strip()
                 if loco_id:
                     locomotives_found.append(loco_id)
-                    if 'lclist' in xml_response.lower():
-                        print(f"Found locomotive: {loco_id}")
                 
                 start_pos = id_end
             
@@ -231,11 +216,8 @@ class LocoList:
                     unique_locomotives.append(loco_id)
             
             if unique_locomotives:
-                print(f"Valid locomotives found: {unique_locomotives}")
-                
                 # Clear existing list only if we found substantial new data
                 if len(unique_locomotives) > len(self.locomotives):
-                    print("Updating locomotive list...")
                     self.clear()
                 
                 # Add locomotives (up to max limit)
@@ -249,20 +231,15 @@ class LocoList:
                 # Save updated list if we added any
                 if added > 0:
                     self.save_to_file()
-                    print(f"Added {added} locomotives, total: {len(self.locomotives)}")
+                    print(f"Locomotives found: {', '.join(unique_locomotives)} - Saved to file")
                     return True
                 else:
-                    # Only show "no new locomotives" message for lclist responses
-                    if 'lclist' in xml_response.lower():
-                        print("No new locomotives added (already in list)")
                     return False
             else:
-                if 'lclist' in xml_response.lower():
-                    print("No locomotive IDs found in lclist response")
                 return False
                 
         except Exception as e:
-            print(f"Error parsing locomotive response: {e}")
+            print(f"Error parsing locomotives: {e}")
             return False
         finally:
             gc.collect()

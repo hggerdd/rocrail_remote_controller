@@ -172,45 +172,17 @@ def handle_data(data):
     
     # Only process locomotive data if we haven't loaded locomotives yet
     if not locomotives_loaded:
-        # Only show detailed logging if we find locomotive list data
-        if 'lclist' in xml_buffer.lower():
-            print("="*60)
-            print("LOCOMOTIVE LIST RESPONSE DETECTED!")
-            print("="*60)
-            print(f"RAW DATA: {data_str}")
-            print("-"*60)
-            print(f"BUFFER CONTENT: {xml_buffer}")
-            print("-"*60)
-            
-            # Process locomotive data
-            print("*** PROCESSING LOCOMOTIVE LIST ***")
+        # Check for locomotive list response
+        if 'lclist' in xml_buffer.lower() or '<lc ' in xml_buffer:
             if loco_list.update_from_rocrail_response(xml_buffer):
-                print("*** LOCOMOTIVE LIST UPDATED SUCCESSFULLY ***")
-                update_locomotive_display()
-                locomotive_query_pending = False
-                locomotive_query_start_time = 0
-                locomotives_loaded = True  # Stop further locomotive queries
-                print("*** LOCOMOTIVE DISCOVERY COMPLETE - STOPPING QUERIES ***")
-            else:
-                print("*** LOCOMOTIVE LIST PARSING FAILED ***")
-            
-            print("="*60)
-        
-        # Check for locomotive data in other formats (minimal logging)
-        elif '<lc ' in xml_buffer:
-            print("Found locomotive data in response - processing...")
-            if loco_list.update_from_rocrail_response(xml_buffer):
-                print("Locomotive list updated")
                 update_locomotive_display()
                 locomotive_query_pending = False
                 locomotive_query_start_time = 0
                 locomotives_loaded = True  # Stop further locomotive queries
         
-        # Check for complete model response (lclist command response)
+        # Check for complete model response
         elif locomotive_query_pending and ('</model>' in xml_buffer or '</xmlh>' in xml_buffer):
-            print("Processing locomotive query response...")
             if loco_list.update_from_rocrail_response(xml_buffer):
-                print("Locomotives found and updated!")
                 update_locomotive_display()
                 locomotives_loaded = True  # Stop further locomotive queries
             locomotive_query_pending = False
@@ -226,7 +198,6 @@ def send_poti_value(speed, direction):
     
     current_loco_id = loco_list.get_selected_id()
     if not current_loco_id:
-        print("No locomotive selected")
         return False
     
     if socket_client:
@@ -236,8 +207,6 @@ def send_poti_value(speed, direction):
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
-            
-            print(message_and_header)
             
             return True
         except Exception as e:
@@ -250,7 +219,6 @@ def send_light_status(light_on_off):
     
     current_loco_id = loco_list.get_selected_id()
     if not current_loco_id:
-        print("No locomotive selected")
         return False
     
     if socket_client:
@@ -259,8 +227,6 @@ def send_light_status(light_on_off):
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
-            
-            print(message_and_header)
             
             return True
         except Exception as e:
@@ -284,8 +250,7 @@ def query_locomotives():
             locomotive_query_pending = True
             locomotive_query_start_time = time.ticks_ms()
             
-            print("Querying locomotives from RocRail (specific lclist command)...")
-            print(message_and_header)
+            print("Querying locomotives from RocRail...")
             
             return True
         except Exception as e:
@@ -310,13 +275,11 @@ def handle_locomotive_selection():
     if btn_up.is_pressed():
         if loco_list.select_next():
             selection_changed = True
-            print("Selected next locomotive")
     
     # Handle DOWN button (previous locomotive)
     if btn_down.is_pressed():
         if loco_list.select_previous():
             selection_changed = True
-            print("Selected previous locomotive")
     
     # Update display if selection changed
     if selection_changed:
@@ -332,17 +295,13 @@ def initialize_locomotive_list():
     
     if loco_list.get_count() == 0:
         # No locomotives loaded, add default and query for more
-        print("No locomotives found, adding default and querying RocRail...")
+        print("No saved locomotives - querying RocRail...")
         loco_list.add_locomotive(DEFAULT_LOCO_ID)
         loco_list.save_to_file()
-        
-        # Query RocRail for current locomotive list
-        print("Querying RocRail for locomotive list...")
         query_locomotives()
     else:
         print(f"Loaded {loco_list.get_count()} locomotives from file")
         locomotives_loaded = True  # We have locomotives, stop querying
-        print("Locomotive discovery complete - using saved locomotives")
     
     # Update display
     update_locomotive_display()
@@ -386,9 +345,8 @@ if run:
                             locomotive_query_start_time = 0
                     
                     if timer.is_ready("check_wifi_update", WIFI_CHECK_INTERVAL):
-                        print("check wifi connection")
                         if not wlan.isconnected():
-                            print("!!! wifi not connected --> reconnect")
+                            print("WiFi disconnected - attempting reconnect")
                     
                     # Update WiFi status LED (blinking)
                     if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
@@ -402,14 +360,13 @@ if run:
                     # Check for locomotive query timeout (only if still loading locomotives)
                     if not locomotives_loaded and locomotive_query_pending and locomotive_query_start_time > 0:
                         if time.ticks_diff(time.ticks_ms(), locomotive_query_start_time) > LOCO_QUERY_TIMEOUT:
-                            print("Locomotive query timeout - no response received")
+                            print("Locomotive query timeout")
                             locomotive_query_pending = False
                             locomotive_query_start_time = 0
                     
                     # Query locomotives periodically only if we haven't loaded them yet
                     if not locomotives_loaded and timer.is_ready("query_locomotives", LOCO_QUERY_INTERVAL):
                         if not locomotive_query_pending:  # Only query if not already waiting for response
-                            print("Periodic locomotive list refresh...")
                             query_locomotives()
                     
                     # regularly update the poti/button input controller (required to have enough values for mean)
@@ -426,34 +383,32 @@ if run:
                             loco_dir = "true" if loco_dir == "false" else "false"
                             send_poti_value(0, loco_dir)
                             sending_speed_enabled = False
-                            print(f"Direction button pressed, toggle direction --> {loco_dir} set speed to zero to start again")
+                            print(f"Direction: {loco_dir}")
                             
                         # check emergency button
                         if emergency_button.is_pressed():
                             send_poti_value(0, loco_dir)
                             sending_speed_enabled = False
-                            print("EMERGENCY STOP initiated, set speed to 0 to continue!!")
+                            print("EMERGENCY STOP")
                         
                         # Light button pressed, toggle the light
                         if light_button.is_pressed():
                             loco_light = "true" if loco_light == "false" else "false"
                             send_light_status(loco_light)
-                            print(f"Light button pressed, toggle light is {loco_light}")
+                            print(f"Light: {loco_light}")
                             
                         # Sound button pressed
                         if sound_button.is_pressed():
-                            print(f"Sound button pressed, horn on for a short time")
+                            print("Horn activated")
                 
                     # every SPEED_UPDATE_INTERVAL check if speed has changed and can be updated (avoid too many commands)
                     if timer.is_ready("update_speed", SPEED_UPDATE_INTERVAL):
                         if sending_speed_enabled:
                             if (speed != last_speed):
-                                print(f"\nSpeed-Poti value: {speed}, {sending_speed_enabled} ---> ")
                                 send_poti_value(speed, loco_dir)
                                 last_speed = speed
                         else:
                             if speed == 0:
-                                print("REENABLE SENDING")
                                 sending_speed_enabled = True                       
                     
                     # Small delay to prevent CPU hogging
