@@ -26,6 +26,7 @@ sending_speed_enabled = True
 # Locomotive query state tracking
 locomotive_query_pending = False
 locomotive_query_start_time = 0
+locomotives_loaded = False  # Flag to stop querying once we have locomotives
 xml_buffer = ""  # Buffer to accumulate XML data
 
 # Initialize locomotive management
@@ -158,7 +159,7 @@ def stop_socket_connection():
 
 def handle_data(data):
     """Callback function for processing received data"""
-    global xml_buffer, locomotive_query_pending, locomotive_query_start_time
+    global xml_buffer, locomotive_query_pending, locomotive_query_start_time, locomotives_loaded
     
     # Simple decode without keyword arguments for MicroPython compatibility
     try:
@@ -169,45 +170,51 @@ def handle_data(data):
     # Accumulate XML data in buffer
     xml_buffer += data_str
     
-    # Only show detailed logging if we find locomotive list data
-    if 'lclist' in xml_buffer.lower():
-        print("="*60)
-        print("LOCOMOTIVE LIST RESPONSE DETECTED!")
-        print("="*60)
-        print(f"RAW DATA: {data_str}")
-        print("-"*60)
-        print(f"BUFFER CONTENT: {xml_buffer}")
-        print("-"*60)
+    # Only process locomotive data if we haven't loaded locomotives yet
+    if not locomotives_loaded:
+        # Only show detailed logging if we find locomotive list data
+        if 'lclist' in xml_buffer.lower():
+            print("="*60)
+            print("LOCOMOTIVE LIST RESPONSE DETECTED!")
+            print("="*60)
+            print(f"RAW DATA: {data_str}")
+            print("-"*60)
+            print(f"BUFFER CONTENT: {xml_buffer}")
+            print("-"*60)
+            
+            # Process locomotive data
+            print("*** PROCESSING LOCOMOTIVE LIST ***")
+            if loco_list.update_from_rocrail_response(xml_buffer):
+                print("*** LOCOMOTIVE LIST UPDATED SUCCESSFULLY ***")
+                update_locomotive_display()
+                locomotive_query_pending = False
+                locomotive_query_start_time = 0
+                locomotives_loaded = True  # Stop further locomotive queries
+                print("*** LOCOMOTIVE DISCOVERY COMPLETE - STOPPING QUERIES ***")
+            else:
+                print("*** LOCOMOTIVE LIST PARSING FAILED ***")
+            
+            print("="*60)
         
-        # Process locomotive data
-        print("*** PROCESSING LOCOMOTIVE LIST ***")
-        if loco_list.update_from_rocrail_response(xml_buffer):
-            print("*** LOCOMOTIVE LIST UPDATED SUCCESSFULLY ***")
-            update_locomotive_display()
+        # Check for locomotive data in other formats (minimal logging)
+        elif '<lc ' in xml_buffer:
+            print("Found locomotive data in response - processing...")
+            if loco_list.update_from_rocrail_response(xml_buffer):
+                print("Locomotive list updated")
+                update_locomotive_display()
+                locomotive_query_pending = False
+                locomotive_query_start_time = 0
+                locomotives_loaded = True  # Stop further locomotive queries
+        
+        # Check for complete model response (lclist command response)
+        elif locomotive_query_pending and ('</model>' in xml_buffer or '</xmlh>' in xml_buffer):
+            print("Processing locomotive query response...")
+            if loco_list.update_from_rocrail_response(xml_buffer):
+                print("Locomotives found and updated!")
+                update_locomotive_display()
+                locomotives_loaded = True  # Stop further locomotive queries
             locomotive_query_pending = False
             locomotive_query_start_time = 0
-        else:
-            print("*** LOCOMOTIVE LIST PARSING FAILED ***")
-        
-        print("="*60)
-    
-    # Check for locomotive data in other formats (minimal logging)
-    elif '<lc ' in xml_buffer:
-        print("Found locomotive data in response - processing...")
-        if loco_list.update_from_rocrail_response(xml_buffer):
-            print("Locomotive list updated")
-            update_locomotive_display()
-            locomotive_query_pending = False
-            locomotive_query_start_time = 0
-    
-    # Check for complete model response (lclist command response)
-    elif locomotive_query_pending and ('</model>' in xml_buffer or '</xmlh>' in xml_buffer):
-        print("Processing locomotive query response...")
-        if loco_list.update_from_rocrail_response(xml_buffer):
-            print("Locomotives found and updated!")
-            update_locomotive_display()
-        locomotive_query_pending = False
-        locomotive_query_start_time = 0
     
     # Prevent buffer from growing too large
     if len(xml_buffer) > 8192:  # 8KB limit
@@ -321,17 +328,21 @@ def handle_locomotive_selection():
 
 def initialize_locomotive_list():
     """Initialize locomotive list - load from file or query from RocRail"""
+    global locomotives_loaded
+    
     if loco_list.get_count() == 0:
         # No locomotives loaded, add default and query for more
         print("No locomotives found, adding default and querying RocRail...")
         loco_list.add_locomotive(DEFAULT_LOCO_ID)
         loco_list.save_to_file()
+        
+        # Query RocRail for current locomotive list
+        print("Querying RocRail for locomotive list...")
+        query_locomotives()
     else:
         print(f"Loaded {loco_list.get_count()} locomotives from file")
-    
-    # Always query RocRail on startup to get the latest locomotive list
-    print("Querying RocRail for current locomotive list...")
-    query_locomotives()
+        locomotives_loaded = True  # We have locomotives, stop querying
+        print("Locomotive discovery complete - using saved locomotives")
     
     # Update display
     update_locomotive_display()
@@ -367,8 +378,8 @@ if run:
                 # Main program loop
                 while True:
                     
-                    # Check for locomotive query timeout
-                    if locomotive_query_pending and locomotive_query_start_time > 0:
+                    # Check for locomotive query timeout (only if still loading locomotives)
+                    if not locomotives_loaded and locomotive_query_pending and locomotive_query_start_time > 0:
                         if time.ticks_diff(time.ticks_ms(), locomotive_query_start_time) > LOCO_QUERY_TIMEOUT:
                             print("Locomotive query timeout - no response received")
                             locomotive_query_pending = False
@@ -388,15 +399,15 @@ if run:
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
                         handle_locomotive_selection()
                     
-                    # Check for locomotive query timeout
-                    if locomotive_query_pending and locomotive_query_start_time > 0:
+                    # Check for locomotive query timeout (only if still loading locomotives)
+                    if not locomotives_loaded and locomotive_query_pending and locomotive_query_start_time > 0:
                         if time.ticks_diff(time.ticks_ms(), locomotive_query_start_time) > LOCO_QUERY_TIMEOUT:
                             print("Locomotive query timeout - no response received")
                             locomotive_query_pending = False
                             locomotive_query_start_time = 0
                     
-                    # Query locomotives periodically to refresh the list
-                    if timer.is_ready("query_locomotives", LOCO_QUERY_INTERVAL):
+                    # Query locomotives periodically only if we haven't loaded them yet
+                    if not locomotives_loaded and timer.is_ready("query_locomotives", LOCO_QUERY_INTERVAL):
                         if not locomotive_query_pending:  # Only query if not already waiting for response
                             print("Periodic locomotive list refresh...")
                             query_locomotives()

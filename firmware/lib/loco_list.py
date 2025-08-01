@@ -252,7 +252,9 @@ class LocoList:
                     print(f"Added {added} locomotives, total: {len(self.locomotives)}")
                     return True
                 else:
-                    print("No new locomotives added")
+                    # Only show "no new locomotives" message for lclist responses
+                    if 'lclist' in xml_response.lower():
+                        print("No new locomotives added (already in list)")
                     return False
             else:
                 if 'lclist' in xml_response.lower():
