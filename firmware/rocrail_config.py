@@ -13,7 +13,8 @@ DEFAULT_LOCO_ID = "BR103"
 
 # Locomotive management
 LOCO_LIST_FILE = "loco_list.txt"
-LOCO_QUERY_INTERVAL = 30000  # Query locomotives every 30 seconds if needed
+LOCO_QUERY_INTERVAL = 30000  # Query locomotives every 30 seconds
+LOCO_QUERY_TIMEOUT = 10000   # Timeout for locomotive query response (10 seconds)
 MAX_LOCOMOTIVES = 5  # Limited by NeoPixel LEDs 1-5
 
 # Timing intervals (ms)

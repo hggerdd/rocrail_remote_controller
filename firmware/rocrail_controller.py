@@ -24,6 +24,11 @@ wlan = None
 
 sending_speed_enabled = True
 
+# Locomotive query state tracking
+locomotive_query_pending = False
+locomotive_query_start_time = 0
+xml_buffer = ""  # Buffer to accumulate XML data
+
 # Initialize locomotive management
 loco_list = LocoList(LOCO_LIST_FILE)
 loco_dir = "true"
@@ -150,14 +155,41 @@ def stop_socket_connection():
 
 def handle_data(data):
     """Callback function for processing received data"""
+    global xml_buffer, locomotive_query_pending, locomotive_query_start_time
+    
     data_str = data.decode('utf-8', errors='ignore')
     print(f"Received data: {data_str}")
     
-    # Check for locomotive list in response
-    if '<lc ' in data_str and loco_list.get_count() == 0:
-        # Try to update locomotive list from response
-        if loco_list.update_from_rocrail_response(data_str):
+    # Accumulate XML data in buffer
+    xml_buffer += data_str
+    
+    # Check for locomotive data in response (regardless of current list state)
+    if '<lc ' in xml_buffer:
+        print("Found locomotive data in response")
+        
+        # Process locomotive data if we have any
+        if loco_list.update_from_rocrail_response(xml_buffer):
+            print("Locomotive list updated from RocRail response")
             update_locomotive_display()
+            locomotive_query_pending = False
+            locomotive_query_start_time = 0
+    
+    # Check for specific RocRail response patterns
+    if '</xmlh>' in xml_buffer or 'RocRail' in xml_buffer:
+        # This looks like a complete response, process for locomotives
+        if locomotive_query_pending and ('<lc ' in xml_buffer or 'locomotive' in xml_buffer.lower()):
+            print("Processing locomotive query response...")
+            if loco_list.update_from_rocrail_response(xml_buffer):
+                print("Locomotives found and updated!")
+                update_locomotive_display()
+            locomotive_query_pending = False
+            locomotive_query_start_time = 0
+    
+    # Prevent buffer from growing too large
+    if len(xml_buffer) > 8192:  # 8KB limit
+        # Keep only the last 4KB
+        xml_buffer = xml_buffer[-4096:]
+        print("XML buffer trimmed to prevent memory issues")
 
 def send_poti_value(speed, direction):
     """Send potentiometer value through the socket connection in Rocrail RCP XML format to set the speed of the selected locomotive"""
@@ -209,7 +241,7 @@ def send_light_status(light_on_off):
 
 def query_locomotives():
     """Query all locomotives from RocRail server"""
-    global socket_client
+    global socket_client, locomotive_query_pending, locomotive_query_start_time
     
     if socket_client:
         try:
@@ -219,12 +251,18 @@ def query_locomotives():
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
             
+            # Set flag to indicate we're expecting locomotive data
+            locomotive_query_pending = True
+            locomotive_query_start_time = time.ticks_ms()
+            
             print("Querying locomotives from RocRail...")
             print(message_and_header)
             
             return True
         except Exception as e:
             print(f"Query error: {e}")
+            locomotive_query_pending = False
+            locomotive_query_start_time = 0
             return False
     return False
 
@@ -266,11 +304,12 @@ def initialize_locomotive_list():
         print("No locomotives found, adding default and querying RocRail...")
         loco_list.add_locomotive(DEFAULT_LOCO_ID)
         loco_list.save_to_file()
-        
-        # Query RocRail for more locomotives
-        query_locomotives()
     else:
         print(f"Loaded {loco_list.get_count()} locomotives from file")
+    
+    # Always query RocRail on startup to get the latest locomotive list
+    print("Querying RocRail for current locomotive list...")
+    query_locomotives()
     
     # Update display
     update_locomotive_display()
@@ -306,6 +345,13 @@ if run:
                 # Main program loop
                 while True:
                     
+                    # Check for locomotive query timeout
+                    if locomotive_query_pending and locomotive_query_start_time > 0:
+                        if time.ticks_diff(time.ticks_ms(), locomotive_query_start_time) > LOCO_QUERY_TIMEOUT:
+                            print("Locomotive query timeout - no response received")
+                            locomotive_query_pending = False
+                            locomotive_query_start_time = 0
+                    
                     if timer.is_ready("check_wifi_update", WIFI_CHECK_INTERVAL):
                         print("check wifi connection")
                         if not wlan.isconnected():
@@ -320,9 +366,17 @@ if run:
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
                         handle_locomotive_selection()
                     
-                    # Query locomotives periodically if we have very few
+                    # Check for locomotive query timeout
+                    if locomotive_query_pending and locomotive_query_start_time > 0:
+                        if time.ticks_diff(time.ticks_ms(), locomotive_query_start_time) > LOCO_QUERY_TIMEOUT:
+                            print("Locomotive query timeout - no response received")
+                            locomotive_query_pending = False
+                            locomotive_query_start_time = 0
+                    
+                    # Query locomotives periodically to refresh the list
                     if timer.is_ready("query_locomotives", LOCO_QUERY_INTERVAL):
-                        if loco_list.get_count() <= 1:
+                        if not locomotive_query_pending:  # Only query if not already waiting for response
+                            print("Periodic locomotive list refresh...")
                             query_locomotives()
                     
                     # regularly update the poti/button input controller (required to have enough values for mean)

@@ -170,33 +170,73 @@ class LocoList:
             True if locomotives were updated, False otherwise
         """
         try:
+            print(f"Parsing XML response: {xml_response[:200]}...")  # Show first 200 chars
+            
             # Simple XML parsing for locomotive entries
             # Look for <lc id="..." patterns
             import re
             
-            # Clear existing list
             old_count = len(self.locomotives)
-            self.clear()
+            locomotives_found = []
             
-            # Find all locomotive entries
-            lc_pattern = r'<lc\s+id="([^"]+)"[^>]*>'
-            matches = re.findall(lc_pattern, xml_response)
+            # Find all locomotive entries with various patterns
+            # Pattern 1: <lc id="locomotivename" ...>
+            lc_pattern1 = r'<lc\s+id="([^"]+)"[^>]*>'
+            matches1 = re.findall(lc_pattern1, xml_response, re.IGNORECASE)
+            locomotives_found.extend(matches1)
             
-            # Add locomotives (up to max limit)
-            added = 0
-            for loco_id in matches:
-                if self.add_locomotive(loco_id):
-                    added += 1
-                    if added >= self.max_locos:
-                        break
+            # Pattern 2: id="locomotivename" (anywhere in lc tag)
+            lc_pattern2 = r'id="([^"]+)"[^>]*(?:/>|>)'
+            matches2 = re.findall(lc_pattern2, xml_response, re.IGNORECASE)
+            locomotives_found.extend(matches2)
             
-            # Save updated list
-            if added > 0:
-                self.save_to_file()
-                print(f"Updated locomotive list: {added} locomotives found")
-                return True
+            # Pattern 3: Look for locomotive names in different XML structures
+            # Some RocRail responses might use different formats
+            loco_pattern3 = r'locomotive[^>]*id="([^"]+)"'
+            matches3 = re.findall(loco_pattern3, xml_response, re.IGNORECASE)
+            locomotives_found.extend(matches3)
+            
+            # Remove duplicates and filter valid locomotive IDs
+            unique_locomotives = []
+            for loco_id in locomotives_found:
+                loco_id = loco_id.strip()
+                # Filter out obvious non-locomotive entries
+                if (loco_id and 
+                    len(loco_id) > 0 and 
+                    loco_id not in unique_locomotives and
+                    not loco_id.startswith('xml') and
+                    not loco_id.startswith('query') and
+                    not loco_id.isdigit() or len(loco_id) > 3):  # Allow digits if longer than 3 chars
+                    unique_locomotives.append(loco_id)
+            
+            print(f"Found potential locomotives: {unique_locomotives}")
+            
+            # Add locomotives if we found any new ones
+            if unique_locomotives:
+                # Clear existing list only if we found substantial new data
+                if len(unique_locomotives) > len(self.locomotives):
+                    print("Found more locomotives, updating list...")
+                    self.clear()
+                
+                # Add locomotives (up to max limit)
+                added = 0
+                for loco_id in unique_locomotives:
+                    if self.add_locomotive(loco_id):
+                        added += 1
+                        print(f"Added locomotive: {loco_id}")
+                        if added >= self.max_locos:
+                            break
+                
+                # Save updated list if we added any
+                if added > 0:
+                    self.save_to_file()
+                    print(f"Updated locomotive list: {added} locomotives added, total: {len(self.locomotives)}")
+                    return True
+                else:
+                    print("No new locomotives added (might already exist in list)")
+                    return False
             else:
-                print("No locomotives found in RocRail response")
+                print("No locomotive patterns found in XML response")
                 return False
                 
         except Exception as e:
