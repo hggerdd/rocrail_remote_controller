@@ -11,6 +11,11 @@ ROCRAIL_PORT = 8051
 # Default locomotive
 DEFAULT_LOCO_ID = "BR103"
 
+# Locomotive management
+LOCO_LIST_FILE = "loco_list.txt"
+LOCO_QUERY_INTERVAL = 30000  # Query locomotives every 30 seconds if needed
+MAX_LOCOMOTIVES = 5  # Limited by NeoPixel LEDs 1-5
+
 # Timing intervals (ms)
 WIFI_CHECK_INTERVAL = 15500
 ROCRAIL_CHECK_INTERVAL = 13200

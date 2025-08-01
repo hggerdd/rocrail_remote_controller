@@ -71,3 +71,34 @@ class NeoPixelController:
         
         self.np[led_num] = color
         self.np.write()
+    
+    def update_locomotive_display(self, selected_index, total_locomotives):
+        """Update LEDs 1-5 to show locomotive selection
+        Args:
+            selected_index: Index of currently selected locomotive (0-4)
+            total_locomotives: Total number of available locomotives (0-5)
+        """
+        # LEDs 1-5 (indices 1-4) represent locomotives
+        # LED 0 is reserved for WiFi status
+        
+        for i in range(1, 6):  # LEDs 1-5
+            loco_index = i - 1  # Convert to locomotive index (0-4)
+            
+            if loco_index < total_locomotives:
+                if loco_index == selected_index:
+                    # Selected locomotive: bright blue
+                    self.np[i] = (0, 0, 255)
+                else:
+                    # Available locomotive: dim green
+                    self.np[i] = (0, 50, 0)
+            else:
+                # No locomotive: off
+                self.np[i] = (0, 0, 0)
+        
+        self.np.write()
+    
+    def clear_locomotive_display(self):
+        """Turn off locomotive LEDs (1-5)"""
+        for i in range(1, 6):
+            self.np[i] = (0, 0, 0)
+        self.np.write()

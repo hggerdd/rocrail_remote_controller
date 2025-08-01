@@ -7,10 +7,11 @@ import machine
 from machine import Pin
 
 from rocrail_config import *
-from interval_timer import IntervalTimer
-from poti_controller import PotiController
-from button_controller import ButtonController
-from neopixel_controller import NeoPixelController
+from lib.interval_timer import IntervalTimer
+from lib.poti_controller import PotiController
+from lib.button_controller import ButtonController
+from lib.neopixel_controller import NeoPixelController
+from lib.loco_list import LocoList
 
 from btn_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL, BTN_GELB, BTN_BLAU, BTN_MITTE_UP, BTN_MITTE_DOWN
 from btn_config import ADC_GESCHWINDIGKEIT
@@ -23,10 +24,10 @@ wlan = None
 
 sending_speed_enabled = True
 
-# set locomotive related values
-loco_id = "BR103"
+# Initialize locomotive management
+loco_list = LocoList(LOCO_LIST_FILE)
 loco_dir = "true"
-loco_light = "off"
+loco_light = "false"
 
 # set the speed poti to get the desired speed
 speed_poti = PotiController(pin_num=ADC_GESCHWINDIGKEIT, filter_size=5, threshold=1)
@@ -35,13 +36,12 @@ emergency_button = ButtonController(pin_num=BTN_NOTHALT, debounce_ms=5)
 direction_button = ButtonController(pin_num=BTN_RICHTUNGSWECHEL, debounce_ms=5)
 sound_button = ButtonController(pin_num=BTN_GELB, debounce_ms=5)
 
+# Locomotive selection buttons
 btn_up = ButtonController(pin_num=BTN_MITTE_UP, debounce_ms=5)
 btn_down = ButtonController(pin_num=BTN_MITTE_DOWN, debounce_ms=5)
 
 # Initialize NeoPixel controller - turns off all LEDs at startup
 neopixel_ctrl = NeoPixelController(pin_num=NEOPIXEL_PIN, num_leds=NEOPIXEL_COUNT)
-
-
 
 def connect_wifi(ssid, password, max_retries=10):
     global wlan
@@ -103,7 +103,6 @@ def socket_listener():
             except Exception as e:
                 print(f"Socket error: {e}")
                 break
-        #time.sleep(0.01)  # Small delay to prevent CPU hogging
     
     print("Socket listener stopped")
 
@@ -151,18 +150,28 @@ def stop_socket_connection():
 
 def handle_data(data):
     """Callback function for processing received data"""
-    print(f"Received data: {data} \n\n")
-    # Process your data here
-    pass
+    data_str = data.decode('utf-8', errors='ignore')
+    print(f"Received data: {data_str}")
+    
+    # Check for locomotive list in response
+    if '<lc ' in data_str and loco_list.get_count() == 0:
+        # Try to update locomotive list from response
+        if loco_list.update_from_rocrail_response(data_str):
+            update_locomotive_display()
 
 def send_poti_value(speed, direction):
-    """Send potentiometer value through the socket connection in Rocail RCP XML format to set the speed of the selected locomotive"""
+    """Send potentiometer value through the socket connection in Rocrail RCP XML format to set the speed of the selected locomotive"""
     global socket_client
+    
+    current_loco_id = loco_list.get_selected_id()
+    if not current_loco_id:
+        print("No locomotive selected")
+        return False
     
     if socket_client:
         try:
             # Format the message according to your protocol
-            message = f'<lc id="BR103" V="{speed}" dir="{direction}"/>'
+            message = f'<lc id="{current_loco_id}" V="{speed}" dir="{direction}"/>'
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
@@ -178,9 +187,14 @@ def send_poti_value(speed, direction):
 def send_light_status(light_on_off):
     global socket_client
     
+    current_loco_id = loco_list.get_selected_id()
+    if not current_loco_id:
+        print("No locomotive selected")
+        return False
+    
     if socket_client:
         try:
-            message = f'<fn id="{loco_id}" fn0="{light_on_off}"/>'
+            message = f'<fn id="{current_loco_id}" fn0="{light_on_off}"/>'
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
@@ -193,23 +207,93 @@ def send_light_status(light_on_off):
             return False
     return False
 
+def query_locomotives():
+    """Query all locomotives from RocRail server"""
+    global socket_client
+    
+    if socket_client:
+        try:
+            # Send query command to get all locomotives
+            message = '<query/>'
+            message_len = len(message)
+            message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
+            socket_client.send(message_and_header.encode())
+            
+            print("Querying locomotives from RocRail...")
+            print(message_and_header)
+            
+            return True
+        except Exception as e:
+            print(f"Query error: {e}")
+            return False
+    return False
+
+def update_locomotive_display():
+    """Update NeoPixel display to show current locomotive selection"""
+    selected_index = loco_list.get_selected_index()
+    total_locos = loco_list.get_count()
+    neopixel_ctrl.update_locomotive_display(selected_index, total_locos)
+    print(loco_list.get_status_string())
+
+def handle_locomotive_selection():
+    """Handle locomotive selection button presses"""
+    selection_changed = False
+    
+    # Handle UP button (next locomotive)
+    if btn_up.is_pressed():
+        if loco_list.select_next():
+            selection_changed = True
+            print("Selected next locomotive")
+    
+    # Handle DOWN button (previous locomotive)
+    if btn_down.is_pressed():
+        if loco_list.select_previous():
+            selection_changed = True
+            print("Selected previous locomotive")
+    
+    # Update display if selection changed
+    if selection_changed:
+        update_locomotive_display()
+        # Reset speed sending to ensure new locomotive starts safely
+        global sending_speed_enabled
+        sending_speed_enabled = False
+        send_poti_value(0, loco_dir)
+
+def initialize_locomotive_list():
+    """Initialize locomotive list - load from file or query from RocRail"""
+    if loco_list.get_count() == 0:
+        # No locomotives loaded, add default and query for more
+        print("No locomotives found, adding default and querying RocRail...")
+        loco_list.add_locomotive(DEFAULT_LOCO_ID)
+        loco_list.save_to_file()
+        
+        # Query RocRail for more locomotives
+        query_locomotives()
+    else:
+        print(f"Loaded {loco_list.get_count()} locomotives from file")
+    
+    # Update display
+    update_locomotive_display()
+
 # Main program
-#if __name__ == "__main__":
 run = True
 if run:    
     # Connect to WiFi
     if connect_wifi(WIFI_SSID, WIFI_PASSWORD):
         print("WiFi connection successful")
         
-        # Set initial WiFi status on LED 1 (green blinking)
+        # Set initial WiFi status on LED 0 (green blinking)
         neopixel_ctrl.wifi_status_led(True, True)
         
-        # initialize the timer for regulare events
+        # initialize the timer for regular events
         timer = IntervalTimer()
         
         # Connect to the rocrail server and start background monitoring
         print("connect to " + ROCRAIL_HOST)
         if start_socket_connection(ROCRAIL_HOST, ROCRAIL_PORT, handle_data):
+            
+            # Initialize locomotive list
+            initialize_locomotive_list()
             
             # Initialise speed values
             last_speed = -1
@@ -232,6 +316,15 @@ if run:
                         wifi_blink_toggle = not wifi_blink_toggle
                         neopixel_ctrl.wifi_status_led(wlan.isconnected(), wifi_blink_toggle)
                     
+                    # Handle locomotive selection buttons
+                    if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
+                        handle_locomotive_selection()
+                    
+                    # Query locomotives periodically if we have very few
+                    if timer.is_ready("query_locomotives", LOCO_QUERY_INTERVAL):
+                        if loco_list.get_count() <= 1:
+                            query_locomotives()
+                    
                     # regularly update the poti/button input controller (required to have enough values for mean)
                     if timer.is_ready("send_poti_update", POTI_UPDATE_INTERVAL):
                         
@@ -241,18 +334,18 @@ if run:
                         # check direction button(incl. debouncing),
                         # toggle direction and set speed to 0,
                         # disable speed sending until the
-                        # seletion (poti) is set to speed 0
+                        # selection (poti) is set to speed 0
                         if direction_button.is_pressed():
                             loco_dir = "true" if loco_dir == "false" else "false"
                             send_poti_value(0, loco_dir)
                             sending_speed_enabled = False
-                            print(f"Direction button gedrückt, toggle den Zustand --> {loco_dir} set speed to zero to start again")
+                            print(f"Direction button pressed, toggle direction --> {loco_dir} set speed to zero to start again")
                             
-                        # check emergence button
+                        # check emergency button
                         if emergency_button.is_pressed():
                             send_poti_value(0, loco_dir)
                             sending_speed_enabled = False
-                            print("NOTSTOP eingeleitet, setze Geschwindigkeit auf 0 um weiter zu fahren!!")
+                            print("EMERGENCY STOP initiated, set speed to 0 to continue!!")
                         
                         # Light button pressed, toggle the light
                         if light_button.is_pressed():
@@ -260,10 +353,9 @@ if run:
                             send_light_status(loco_light)
                             print(f"Light button pressed, toggle light is {loco_light}")
                             
-                        # Light button pressed, toggle the light
+                        # Sound button pressed
                         if sound_button.is_pressed():
                             print(f"Sound button pressed, horn on for a short time")
-                        
                 
                     # every SPEED_UPDATE_INTERVAL check if speed has changed and can be updated (avoid too many commands)
                     if timer.is_ready("update_speed", SPEED_UPDATE_INTERVAL):
@@ -277,13 +369,15 @@ if run:
                                 print("REENABLE SENDING")
                                 sending_speed_enabled = True                       
                     
-                # Small delay to prevent CPU hogging
-                time.sleep(0.05)
+                    # Small delay to prevent CPU hogging
+                    time.sleep(0.05)
                     
             except KeyboardInterrupt:
                 print("Program interrupted")
                 stop_socket_connection()
     else:
         print("WiFi connection failed")
-        # Show WiFi connection failed on LED 1 (red blinking)
+        # Show WiFi connection failed on LED 0 (red blinking)
         neopixel_ctrl.wifi_status_led(False, True)
+        # Clear locomotive display
+        neopixel_ctrl.clear_locomotive_display()
