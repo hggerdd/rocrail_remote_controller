@@ -337,6 +337,7 @@ def handle_locomotive_selection():
         global sending_speed_enabled
         sending_speed_enabled = False
         send_poti_value(0, loco_dir)
+        print("Locomotive changed - POTI ZERO REQUIRED (purple LED blinking)")
 
 def initialize_locomotive_list():
     """Initialize locomotive list - load from file or query from RocRail"""
@@ -412,6 +413,8 @@ if run:
                         neopixel_ctrl.wifi_status_led(wlan.isconnected(), wifi_blink_toggle)
                         # Update RocRail status LED
                         neopixel_ctrl.rocrail_status_led(rocrail_status, rocrail_blink_toggle)
+                        # Update poti zero request LED (5th LED) - blinks purple when poti must be set to zero
+                        neopixel_ctrl.poti_zero_request_led(not sending_speed_enabled, wifi_blink_toggle)
                     
                     # Handle locomotive selection buttons
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
@@ -438,13 +441,13 @@ if run:
                             sending_speed_enabled = False
                             # Update direction indicator LEDs
                             neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
-                            print(f"Direction: {loco_dir}")
+                            print(f"Direction: {loco_dir} - POTI ZERO REQUIRED (purple LED blinking)")
                             
                         # check emergency button
                         if emergency_button.is_pressed():
                             send_poti_value(0, loco_dir)
                             sending_speed_enabled = False
-                            print("EMERGENCY STOP")
+                            print("EMERGENCY STOP - POTI ZERO REQUIRED (purple LED blinking)")
                         
                         # Light button pressed, toggle the light
                         if light_button.is_pressed():
@@ -465,7 +468,7 @@ if run:
                                 last_speed = speed
                         else:
                             if speed == 0:
-                                print("Speed sending re-enabled")
+                                print("Speed sending re-enabled - poti zero request cleared (purple LED off)")
                                 sending_speed_enabled = True                       
                     
                     # Small delay to prevent CPU hogging

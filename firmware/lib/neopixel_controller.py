@@ -88,23 +88,32 @@ class NeoPixelController:
         
         self.np.write()
     
+    def poti_zero_request_led(self, poti_zero_required, blink_toggle=False):
+        """Control poti zero request LED (LED 4) - 5th LED
+        Args:
+            poti_zero_required: True if user must set poti to zero, False if normal operation
+            blink_toggle: True/False for blinking effect when poti zero is required
+        """
+        if poti_zero_required:
+            # Blink purple when user needs to set poti to zero
+            if blink_toggle:
+                self.np[LED_ACTIVITY] = (255, 0, 255)  # Purple
+            else:
+                self.np[LED_ACTIVITY] = (0, 0, 0)      # Off
+        else:
+            # Turn off LED when in normal operation (poti zero not required)
+            self.np[LED_ACTIVITY] = (0, 0, 0)
+        
+        self.np.write()
+    
     def activity_indicator_led(self, active, blink_toggle=False):
-        """Control activity indicator LED (LED 4)
+        """Control activity indicator LED (LED 4) - DEPRECATED: Use poti_zero_request_led instead
         Args:
             active: True if active, False if inactive
             blink_toggle: True/False for blinking effect when inactive
         """
-        if active:
-            # Turn off when active
-            self.np[LED_ACTIVITY] = (0, 0, 0)
-        else:
-            # Blink red when inactive (e.g., poti at 0)
-            if blink_toggle:
-                self.np[LED_ACTIVITY] = (255, 0, 0)  # Red
-            else:
-                self.np[LED_ACTIVITY] = (0, 0, 0)    # Off
-        
-        self.np.write()
+        # Redirect to new method for backward compatibility
+        self.poti_zero_request_led(not active, blink_toggle)
         
     def set_status_led(self, led_num, color, brightness=255):
         """Set status LED with brightness control
