@@ -27,24 +27,36 @@ class NeoPixelController:
             self.np[led_num] = (r, g, b)
             self.np.write()
     
-    def wifi_status_led(self, is_connected, blink_toggle):
+    def wifi_status_led(self, status, blink_toggle=False):
         """Control WiFi status LED (LED 0)
         Args:
-            is_connected: True if WiFi connected, False if disconnected
-            blink_toggle: True/False for blinking effect
+            status: 'initial', 'connecting', 'connected', 'failed'
+            blink_toggle: True/False for blinking effect when needed
         """
-        if is_connected:
+        if status == 'initial':
+            # Constant light orange at startup
+            self.np[LED_WIFI] = (255, 165, 0)  # Orange
+        elif status == 'connecting':
+            # Blinking orange while trying to connect
+            if blink_toggle:
+                self.np[LED_WIFI] = (255, 165, 0)  # Orange on
+            else:
+                self.np[LED_WIFI] = (0, 0, 0)      # Off
+        elif status == 'connected':
             # Green blinking when connected (save battery)
             if blink_toggle:
-                self.np[LED_WIFI] = (0, 255, 0)  # Green on
+                self.np[LED_WIFI] = (0, 255, 0)    # Green on
             else:
-                self.np[LED_WIFI] = (0, 0, 0)    # Off
-        else:
-            # Red blinking when disconnected (80% brightness = 204)
+                self.np[LED_WIFI] = (0, 0, 0)      # Off
+        elif status == 'failed':
+            # Red blinking when connection failed
             if blink_toggle:
-                self.np[LED_WIFI] = (204, 0, 0)  # Red 80% brightness
+                self.np[LED_WIFI] = (255, 0, 0)    # Red on
             else:
-                self.np[LED_WIFI] = (0, 0, 0)    # Off
+                self.np[LED_WIFI] = (0, 0, 0)      # Off
+        else:
+            # Unknown status - turn off
+            self.np[LED_WIFI] = (0, 0, 0)
         self.np.write()
     
     def rocrail_status_led(self, status, blink_toggle=False):

@@ -21,6 +21,9 @@ data_callback = None
 running = False
 wlan = None
 
+# WiFi connection status tracking
+wifi_status = "initial"  # States: "initial", "connecting", "connected", "failed"
+
 # RocRail connection status tracking
 rocrail_status = "disconnected"  # States: "disconnected", "connecting", "connected", "lost"
 last_rocrail_activity_time = 0  # Track both sends and receives
@@ -53,8 +56,19 @@ btn_down = ButtonController(pin_num=BTN_MITTE_DOWN, debounce_ms=5)
 # Initialize NeoPixel controller - turns off all LEDs at startup
 neopixel_ctrl = NeoPixelController(pin_num=NEOPIXEL_PIN, num_leds=NEOPIXEL_COUNT)
 
+# Set initial LED states before any connections
+# WiFi indicator: initial orange (before attempting connection)
+neopixel_ctrl.wifi_status_led("initial")
+# RocRail indicator: disconnected state
+neopixel_ctrl.rocrail_status_led("disconnected")
+# Clear all other LEDs
+neopixel_ctrl.clear_locomotive_display()
+
 def connect_wifi(ssid, password, max_retries=10):
-    global wlan
+    global wlan, wifi_status
+    
+    # Set connecting status
+    wifi_status = "connecting"
     
     # Create WLAN interface
     wlan = network.WLAN(network.STA_IF)
@@ -66,6 +80,7 @@ def connect_wifi(ssid, password, max_retries=10):
     if wlan.isconnected():
         print("Already connected to WiFi")
         print("Network config:", wlan.ifconfig())
+        wifi_status = "connected"
         return True
     
     # Connect to WiFi
@@ -83,9 +98,11 @@ def connect_wifi(ssid, password, max_retries=10):
     if wlan.isconnected():
         print("Connected to WiFi")
         print("Network config:", wlan.ifconfig())
+        wifi_status = "connected"
         return True
     else:
         print("Failed to connect")
+        wifi_status = "failed"
         return False
 
 def socket_listener():
@@ -363,12 +380,6 @@ if run:
     if connect_wifi(WIFI_SSID, WIFI_PASSWORD):
         print("WiFi connection successful")
         
-        # Set initial WiFi status on LED 0 (green blinking)
-        neopixel_ctrl.wifi_status_led(True, True)
-        
-        # Set initial RocRail status on LED 1 (light orange - disconnected)
-        neopixel_ctrl.rocrail_status_led("disconnected")
-        
         # initialize the timer for regular events
         timer = IntervalTimer()
         
@@ -405,12 +416,25 @@ if run:
                         print("check wifi connection")
                         if not wlan.isconnected():
                             print("!!! wifi not connected --> reconnect")
+                            # Update status to show we're trying to reconnect
+                            if wifi_status != "connecting":
+                                wifi_status = "connecting"
+                            # Attempt to reconnect
+                            if connect_wifi(WIFI_SSID, WIFI_PASSWORD, max_retries=3):
+                                print("WiFi reconnection successful")
+                            else:
+                                print("WiFi reconnection failed")
+                        else:
+                            # WiFi is connected, ensure status is correct
+                            if wifi_status != "connected":
+                                wifi_status = "connected"
+                                print("WiFi status updated to connected")
                     
-                    # Update WiFi status LED (blinking)
+                    # Update WiFi and status LEDs (blinking)
                     if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
                         wifi_blink_toggle = not wifi_blink_toggle
                         rocrail_blink_toggle = not rocrail_blink_toggle
-                        neopixel_ctrl.wifi_status_led(wlan.isconnected(), wifi_blink_toggle)
+                        neopixel_ctrl.wifi_status_led(wifi_status, wifi_blink_toggle)
                         # Update RocRail status LED
                         neopixel_ctrl.rocrail_status_led(rocrail_status, rocrail_blink_toggle)
                         # Update poti zero request LED (5th LED) - blinks purple when poti must be set to zero
@@ -479,9 +503,32 @@ if run:
                 stop_socket_connection()
     else:
         print("WiFi connection failed")
-        # Show WiFi connection failed on LED 0 (red blinking)
-        neopixel_ctrl.wifi_status_led(False, True)
-        # Set RocRail status to disconnected 
-        neopixel_ctrl.rocrail_status_led("disconnected")
+        # WiFi status is already set to "failed" by connect_wifi function
         # Clear locomotive display
         neopixel_ctrl.clear_locomotive_display()
+        
+        # Keep trying to reconnect and blink red LED
+        timer = IntervalTimer()
+        wifi_blink_toggle = False
+        
+        try:
+            while True:
+                # Update WiFi status LED (blinking red)
+                if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
+                    wifi_blink_toggle = not wifi_blink_toggle
+                    neopixel_ctrl.wifi_status_led(wifi_status, wifi_blink_toggle)
+                
+                # Try to reconnect WiFi periodically
+                if timer.is_ready("wifi_reconnect", WIFI_CHECK_INTERVAL):
+                    print("Attempting WiFi reconnection...")
+                    if connect_wifi(WIFI_SSID, WIFI_PASSWORD, max_retries=3):
+                        print("WiFi reconnection successful - restarting main program")
+                        machine.reset()  # Restart the program to enter normal operation
+                        break
+                    else:
+                        print("WiFi reconnection still failed")
+                
+                time.sleep(0.1)
+                
+        except KeyboardInterrupt:
+            print("Program interrupted during WiFi recovery")
