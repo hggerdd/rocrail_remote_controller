@@ -87,12 +87,29 @@ def connect_wifi(ssid, password, max_retries=10):
     print(f"Connecting to {ssid}...")
     wlan.connect(ssid, password)
     
-    # Wait for connection with timeout
+    # Wait for connection with timeout and blink LED
     retry_count = 0
+    blink_toggle = False
+    last_blink_time = time.ticks_ms()
+    last_retry_time = time.ticks_ms()
+    
     while not wlan.isconnected() and retry_count < max_retries:
-        print("Waiting for connection...")
-        time.sleep(1)
-        retry_count += 1
+        current_time = time.ticks_ms()
+        
+        # Blink the LED every 500ms during connection
+        if time.ticks_diff(current_time, last_blink_time) >= NEOPIXEL_BLINK_INTERVAL:
+            blink_toggle = not blink_toggle
+            neopixel_ctrl.wifi_status_led(wifi_status, blink_toggle)
+            last_blink_time = current_time
+        
+        # Check connection more frequently than before
+        time.sleep(0.1)
+        
+        # Increment retry counter every second
+        if time.ticks_diff(current_time, last_retry_time) >= 1000:
+            print("Waiting for connection...")
+            retry_count += 1
+            last_retry_time = current_time
     
     # Check connection status
     if wlan.isconnected():
