@@ -1,13 +1,7 @@
 from machine import Pin
 from neopixel import NeoPixel
 import time
-
-# Import LED assignment constants
-try:
-    from rocrail_config import LED_WIFI, LED_ROCRAIL, LED_DIR_LEFT, LED_DIR_RIGHT, LED_ACTIVITY, LED_LOCO_START, LED_LOCO_END
-except ImportError:
-    # Fallback values if import fails
-    LED_WIFI, LED_ROCRAIL, LED_DIR_LEFT, LED_DIR_RIGHT, LED_ACTIVITY, LED_LOCO_START, LED_LOCO_END = 0, 1, 2, 3, 4, 5, 9
+from rocrail_config import LED_WIFI, LED_ROCRAIL, LED_DIR_LEFT, LED_DIR_RIGHT, LED_ACTIVITY, LED_LOCO_START, LED_LOCO_END
 
 class NeoPixelController:
     """Controller for 10 NeoPixel LEDs with status visualization"""
