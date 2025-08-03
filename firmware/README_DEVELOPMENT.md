@@ -95,11 +95,13 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - Speed/direction control with safety features
 - Locomotive selection and XML parsing
 - Status LED updates with timing intervals
+- Robust WiFi monitoring and automatic reconnection with interface reset capability
 
 ### Configuration (`rocrail_config.py`)
 - WiFi credentials and RocRail server settings
 - Timing intervals and hardware pin assignments
 - LED assignments and locomotive limits
+- WiFi reconnection parameters and recovery settings
 
 ## Development Commands
 
@@ -130,5 +132,6 @@ Update `README_DEVELOPMENT.md` when:
 - Direction indicators synchronized with locomotive state
 - Energy-efficient locomotive display (only selected LED active)
 - Robust error handling and automatic recovery
+- Advanced WiFi management with interface reset and graceful recovery from internal errors
 
 Focus development on `rocrail_controller.py` for control logic and `lib/neopixel_controller.py` for status visualization.

@@ -64,63 +64,124 @@ neopixel_ctrl.rocrail_status_led("disconnected")
 # Clear all other LEDs
 neopixel_ctrl.clear_locomotive_display()
 
+def reset_wifi_interface():
+    """Reset WiFi interface to recover from internal errors"""
+    global wlan
+    
+    try:
+        print("Resetting WiFi interface...")
+        if wlan:
+            wlan.disconnect()
+            wlan.active(False)
+            time.sleep(1)  # Wait for cleanup
+        
+        wlan = network.WLAN(network.STA_IF)
+        wlan.active(True)
+        time.sleep(0.5)  # Wait for activation
+        print("WiFi interface reset complete")
+        return True
+    except Exception as e:
+        print(f"WiFi interface reset failed: {e}")
+        return False
+
 def connect_wifi(ssid, password, max_retries=10):
     global wlan, wifi_status
     
     # Set connecting status
     wifi_status = "connecting"
     
-    # Create WLAN interface
-    wlan = network.WLAN(network.STA_IF)
+    # Create WLAN interface if not exists
+    if wlan is None:
+        wlan = network.WLAN(network.STA_IF)
     
-    # Activate the interface
-    wlan.active(True)
-    
-    # Check if already connected
-    if wlan.isconnected():
-        print("Already connected to WiFi")
-        print("Network config:", wlan.ifconfig())
-        wifi_status = "connected"
-        return True
-    
-    # Connect to WiFi
-    print(f"Connecting to {ssid}...")
-    wlan.connect(ssid, password)
-    
-    # Wait for connection with timeout and blink LED
-    retry_count = 0
-    blink_toggle = False
-    last_blink_time = time.ticks_ms()
-    last_retry_time = time.ticks_ms()
-    
-    while not wlan.isconnected() and retry_count < max_retries:
-        current_time = time.ticks_ms()
+    try:
+        # Activate the interface
+        wlan.active(True)
+        time.sleep(0.2)  # Wait for activation
         
-        # Blink the LED every 500ms during connection
-        if time.ticks_diff(current_time, last_blink_time) >= NEOPIXEL_BLINK_INTERVAL:
-            blink_toggle = not blink_toggle
-            neopixel_ctrl.wifi_status_led(wifi_status, blink_toggle)
-            last_blink_time = current_time
+        # Check if already connected
+        if wlan.isconnected():
+            print("Already connected to WiFi")
+            print("Network config:", wlan.ifconfig())
+            wifi_status = "connected"
+            return True
         
-        # Check connection more frequently than before
-        time.sleep(0.1)
+        # Connect to WiFi with error handling
+        print(f"Connecting to {ssid}...")
+        try:
+            wlan.connect(ssid, password)
+        except Exception as e:
+            print(f"WiFi connect error: {e}")
+            # Try to reset interface and retry once
+            if reset_wifi_interface():
+                try:
+                    wlan.connect(ssid, password)
+                except Exception as e2:
+                    print(f"WiFi connect retry failed: {e2}")
+                    wifi_status = "failed"
+                    return False
+            else:
+                wifi_status = "failed"
+                return False
         
-        # Increment retry counter every second
-        if time.ticks_diff(current_time, last_retry_time) >= 1000:
-            print("Waiting for connection...")
-            retry_count += 1
-            last_retry_time = current_time
-    
-    # Check connection status
-    if wlan.isconnected():
-        print("Connected to WiFi")
-        print("Network config:", wlan.ifconfig())
-        wifi_status = "connected"
-        return True
-    else:
-        print("Failed to connect")
+        # Wait for connection with timeout and blink LED
+        retry_count = 0
+        blink_toggle = False
+        last_blink_time = time.ticks_ms()
+        last_retry_time = time.ticks_ms()
+        
+        while not wlan.isconnected() and retry_count < max_retries:
+            current_time = time.ticks_ms()
+            
+            # Blink the LED every 500ms during connection
+            if time.ticks_diff(current_time, last_blink_time) >= NEOPIXEL_BLINK_INTERVAL:
+                blink_toggle = not blink_toggle
+                neopixel_ctrl.wifi_status_led(wifi_status, blink_toggle)
+                last_blink_time = current_time
+            
+            # Check connection more frequently than before
+            time.sleep(0.1)
+            
+            # Increment retry counter every second
+            if time.ticks_diff(current_time, last_retry_time) >= 1000:
+                print("Waiting for connection...")
+                retry_count += 1
+                last_retry_time = current_time
+        
+        # Check connection status
+        if wlan.isconnected():
+            print("Connected to WiFi")
+            print("Network config:", wlan.ifconfig())
+            wifi_status = "connected"
+            return True
+        else:
+            print("Failed to connect")
+            wifi_status = "failed"
+            return False
+            
+    except Exception as e:
+        print(f"WiFi connection error: {e}")
         wifi_status = "failed"
         return False
+
+def reconnect_wifi():
+    """Robust WiFi reconnection with interface reset if needed"""
+    global wlan, wifi_status
+    
+    print("WiFi reconnection starting...")
+    
+    # First try simple reconnection
+    if connect_wifi(WIFI_SSID, WIFI_PASSWORD, max_retries=3):
+        return True
+    
+    # If that fails, reset interface and try again
+    print("Simple reconnection failed, resetting interface...")
+    if reset_wifi_interface():
+        if connect_wifi(WIFI_SSID, WIFI_PASSWORD, max_retries=WIFI_RECONNECT_MAX_RETRIES):
+            return True
+    
+    print("WiFi reconnection failed after interface reset")
+    return False
 
 def socket_listener():
     global socket_client, data_callback, running, rocrail_status, last_rocrail_activity_time, last_rocrail_send_success
@@ -393,7 +454,8 @@ def initialize_locomotive_list():
 # Main program
 run = True
 if run:    
-    # Connect to WiFi
+    # Connect to WiFi with robust reconnection
+    print("Starting WiFi connection...")
     if connect_wifi(WIFI_SSID, WIFI_PASSWORD):
         print("WiFi connection successful")
         
@@ -431,21 +493,28 @@ if run:
                     
                     if timer.is_ready("check_wifi_update", WIFI_CHECK_INTERVAL):
                         print("check wifi connection")
-                        if not wlan.isconnected():
-                            print("!!! wifi not connected --> reconnect")
-                            # Update status to show we're trying to reconnect
-                            if wifi_status != "connecting":
-                                wifi_status = "connecting"
-                            # Attempt to reconnect
-                            if connect_wifi(WIFI_SSID, WIFI_PASSWORD, max_retries=3):
-                                print("WiFi reconnection successful")
+                        try:
+                            if not wlan or not wlan.isconnected():
+                                print("!!! wifi not connected --> reconnect")
+                                # Update status to show we're trying to reconnect
+                                if wifi_status != "connecting":
+                                    wifi_status = "connecting"
+                                # Attempt robust reconnection
+                                if reconnect_wifi():
+                                    print("WiFi reconnection successful")
+                                else:
+                                    print("WiFi reconnection failed - continuing with recovery mode")
+                                    wifi_status = "failed"
                             else:
-                                print("WiFi reconnection failed")
-                        else:
-                            # WiFi is connected, ensure status is correct
-                            if wifi_status != "connected":
-                                wifi_status = "connected"
-                                print("WiFi status updated to connected")
+                                # WiFi is connected, ensure status is correct
+                                if wifi_status != "connected":
+                                    wifi_status = "connected"
+                                    print("WiFi status updated to connected")
+                        except Exception as e:
+                            print(f"WiFi check error: {e}")
+                            wifi_status = "failed"
+                            # Try to reset interface for next check
+                            reset_wifi_interface()
                     
                     # Update WiFi and status LEDs (blinking)
                     if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
@@ -535,10 +604,10 @@ if run:
                     wifi_blink_toggle = not wifi_blink_toggle
                     neopixel_ctrl.wifi_status_led(wifi_status, wifi_blink_toggle)
                 
-                # Try to reconnect WiFi periodically
+                # Try to reconnect WiFi periodically with robust method
                 if timer.is_ready("wifi_reconnect", WIFI_CHECK_INTERVAL):
-                    print("Attempting WiFi reconnection...")
-                    if connect_wifi(WIFI_SSID, WIFI_PASSWORD, max_retries=3):
+                    print("Attempting robust WiFi reconnection...")
+                    if reconnect_wifi():
                         print("WiFi reconnection successful - restarting main program")
                         machine.reset()  # Restart the program to enter normal operation
                         break
