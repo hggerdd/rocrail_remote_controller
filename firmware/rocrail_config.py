@@ -41,5 +41,14 @@ POTI_FILTER_SIZE = 3
 POTI_THRESHOLD = 1
 
 # NeoPixel settings
-NEOPIXEL_COUNT = 6
+NEOPIXEL_COUNT = 10
 NEOPIXEL_BLINK_INTERVAL = 500  # ms for blinking effect
+
+# LED assignments for 10 NeoPixel setup
+LED_WIFI = 0          # WiFi status indicator
+LED_ROCRAIL = 1       # RocRail connection status ("RR")
+LED_DIR_LEFT = 2      # Direction indicator "<" (true)
+LED_DIR_RIGHT = 3     # Direction indicator ">" (false)
+LED_ACTIVITY = 4      # Activity indicator
+LED_LOCO_START = 5    # First locomotive LED (LEDs 5-9 = locos 1-5)
+LED_LOCO_END = 9      # Last locomotive LED
