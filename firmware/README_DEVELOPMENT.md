@@ -135,3 +135,6 @@ Update `README_DEVELOPMENT.md` when:
 - Advanced WiFi management with interface reset and graceful recovery from internal errors
 
 Focus development on `rocrail_controller.py` for control logic and `lib/neopixel_controller.py` for status visualization.
+
+## Development Planning
+See `TASKS.md` for comprehensive task list, priorities, and development roadmap. Tasks are categorized by urgency (Critical/Medium/Low) with effort estimates and dependencies tracked.
