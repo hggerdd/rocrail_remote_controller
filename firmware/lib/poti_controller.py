@@ -4,7 +4,7 @@ from machine import ADC, Pin
 class PotiController:
     """Controls and reads from a potentiometer with noise filtering"""
     
-    def __init__(self, pin_num=36, filter_size=10, threshold=1):
+    def __init__(self, pin_num=36, filter_size=8, threshold=1):
         # Setup ADC
         self.pot = ADC(Pin(pin_num))
         self.pot.atten(ADC.ATTN_11DB)  # Full range: 3.3v
@@ -14,6 +14,10 @@ class PotiController:
         self.samples = []               # Buffer to store samples
         self.last_value = None          # Last returned value
         self.threshold = threshold      # Minimum change to report a new value
+        
+        self.MIN_VALUE = 1310  # Poti calibration from adc_test.py
+        self.MAX_VALUE = 2360
+
     
     def read(self):
         """
@@ -35,7 +39,17 @@ class PotiController:
         filtered_value = sum(self.samples) / len(self.samples)
         
         # Normalize to 0-100 range
-        normalized_value = int((filtered_value / 4096) * 100)
+#         normalized_value = int((filtered_value / 4096) * 100)
+        
+        # Map to 0-100 range
+        if filtered_value <= self.MIN_VALUE:
+            normalized_value = 0
+        elif filtered_value >= self.MAX_VALUE:
+            normalized_value = 100
+        else:
+            normalized_value = int((filtered_value - self.MIN_VALUE) / (self.MAX_VALUE - self.MIN_VALUE) * 100)
+        
+
         
         # Check if value has changed beyond threshold
         if self.last_value is None or abs(normalized_value - self.last_value) >= self.threshold:

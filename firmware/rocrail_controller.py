@@ -90,7 +90,7 @@ def socket_listener():
     
     while running:
         try:
-            data = socket_client.recv(1024)  # Back to original 1024 bytes
+            data = socket_client.recv(4096)  # Back to original 1024 bytes
             if data:
                 if data_callback:
                     data_callback(data)
