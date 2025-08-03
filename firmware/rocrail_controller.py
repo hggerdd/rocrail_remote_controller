@@ -21,6 +21,11 @@ data_callback = None
 running = False
 wlan = None
 
+# RocRail connection status tracking
+rocrail_status = "disconnected"  # States: "disconnected", "connecting", "connected", "lost"
+last_rocrail_data_time = 0
+ROCRAIL_DATA_TIMEOUT = 5000  # 5 seconds in milliseconds
+
 sending_speed_enabled = True
 
 # Locomotive query state tracking
@@ -113,7 +118,10 @@ def start_socket_connection(host, port, callback_function):
         port: Server port
         callback_function: Function to call when data is received
     """
-    global socket_client, data_callback, running
+    global socket_client, data_callback, running, rocrail_status
+    
+    # Set connecting status
+    rocrail_status = "connecting"
     
     try:
         # Create socket (simple MicroPython way)
@@ -125,6 +133,9 @@ def start_socket_connection(host, port, callback_function):
         data_callback = callback_function
         running = True
         
+        # Connection successful
+        rocrail_status = "connected"
+        
         # Start listener thread
         _thread.start_new_thread(socket_listener, ())
         
@@ -133,6 +144,7 @@ def start_socket_connection(host, port, callback_function):
         
     except Exception as e:
         print(f"Connection error: {e}")
+        rocrail_status = "lost"  # Could not connect
         if socket_client:
             try:
                 socket_client.close()
@@ -143,10 +155,11 @@ def start_socket_connection(host, port, callback_function):
 
 def stop_socket_connection():
     """Stop the socket connection and background thread"""
-    global socket_client, running
+    global socket_client, running, rocrail_status
     
     if socket_client:
         running = False
+        rocrail_status = "disconnected"
         time.sleep(0.2)  # Give time for the thread to exit
         socket_client.close()
         socket_client = None
@@ -154,7 +167,10 @@ def stop_socket_connection():
 
 def handle_data(data):
     """Callback function for processing received data"""
-    global xml_buffer, locomotive_query_pending, locomotive_query_start_time, locomotives_loaded
+    global xml_buffer, locomotive_query_pending, locomotive_query_start_time, locomotives_loaded, last_rocrail_data_time
+    
+    # Update last data received time
+    last_rocrail_data_time = time.ticks_ms()
     
     # Simple decode without keyword arguments for MicroPython compatibility
     try:
@@ -315,6 +331,9 @@ if run:
         # Set initial WiFi status on LED 0 (green blinking)
         neopixel_ctrl.wifi_status_led(True, True)
         
+        # Set initial RocRail status on LED 1 (light orange - disconnected)
+        neopixel_ctrl.rocrail_status_led("disconnected")
+        
         # initialize the timer for regular events
         timer = IntervalTimer()
         
@@ -334,6 +353,7 @@ if run:
             
             # Initialize WiFi status blinking
             wifi_blink_toggle = False
+            rocrail_blink_toggle = False
             
             try:
                 # Main program loop
@@ -354,7 +374,19 @@ if run:
                     # Update WiFi status LED (blinking)
                     if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
                         wifi_blink_toggle = not wifi_blink_toggle
+                        rocrail_blink_toggle = not rocrail_blink_toggle
                         neopixel_ctrl.wifi_status_led(wlan.isconnected(), wifi_blink_toggle)
+                        # Update RocRail status LED
+                        neopixel_ctrl.rocrail_status_led(rocrail_status, rocrail_blink_toggle)
+                    
+                    # Check RocRail connection health
+                    if timer.is_ready("check_rocrail_health", 1000):  # Check every second
+                        if rocrail_status == "connected" and last_rocrail_data_time > 0:
+                            # Check if we haven't received data in the last 5 seconds
+                            time_since_last_data = time.ticks_diff(time.ticks_ms(), last_rocrail_data_time)
+                            if time_since_last_data > ROCRAIL_DATA_TIMEOUT:
+                                rocrail_status = "lost"
+                                print("RocRail connection lost - no data received in 5 seconds")
                     
                     # Handle locomotive selection buttons
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
@@ -421,5 +453,7 @@ if run:
         print("WiFi connection failed")
         # Show WiFi connection failed on LED 0 (red blinking)
         neopixel_ctrl.wifi_status_led(False, True)
+        # Set RocRail status to disconnected 
+        neopixel_ctrl.rocrail_status_led("disconnected")
         # Clear locomotive display
         neopixel_ctrl.clear_locomotive_display()
