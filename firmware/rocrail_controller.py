@@ -281,6 +281,8 @@ def handle_locomotive_selection():
     # Update display if selection changed
     if selection_changed:
         update_locomotive_display()
+        # Update direction indicator LEDs for new locomotive
+        neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
         # Reset speed sending to ensure new locomotive starts safely
         global sending_speed_enabled
         sending_speed_enabled = False
@@ -322,6 +324,9 @@ if run:
             
             # Initialize locomotive list
             initialize_locomotive_list()
+            
+            # Initialize direction indicator LEDs with current direction
+            neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
             
             # Initialise speed values
             last_speed = -1
@@ -374,6 +379,8 @@ if run:
                             loco_dir = "true" if loco_dir == "false" else "false"
                             send_poti_value(0, loco_dir)
                             sending_speed_enabled = False
+                            # Update direction indicator LEDs
+                            neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
                             print(f"Direction: {loco_dir}")
                             
                         # check emergency button
