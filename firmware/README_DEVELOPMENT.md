@@ -2,206 +2,133 @@
 
 ## Project Overview
 
-This MicroPython project for ESP32 creates a locomotive controller for Rocrail model railway systems. The device operates in two modes based on button presses at startup:
+MicroPython ESP32 locomotive controller for Rocrail model railway systems. Battery-powered handheld device with 10 status LEDs, potentiometer speed control, and multiple buttons.
 
-1. **Configuration Mode** - Web-based setup for WiFi and Rocrail parameters
-2. **Controller Mode** - Active locomotive control via WiFi connection to Rocrail
+**Operating Modes:**
+- **Configuration Mode**: Web server for WiFi/Rocrail setup (red button at boot)
+- **Controller Mode**: Active locomotive control (default)
 
-## System Architecture
+## Core Files Structure
 
-### Boot Process (`boot.py`)
-The entry point determines operating mode:
-- **Red button pressed**: Starts configuration web server
-- **Green button pressed**: Test mode (incomplete)
-- **No button**: Normal locomotive control mode
+### Critical Files
+- `rocrail_controller.py` - Main locomotive control logic and socket communication
+- `lib/neopixel_controller.py` - 10 LED status visualization controller
+- `rocrail_config.py` - Configuration constants including LED assignments
+- `btn_config.py` - Hardware pin definitions
 
-⚠️ **Bug Note**: Boot.py checks `red_button.value()` twice instead of checking green button.
-
-### Two Main Operating Modes
-
-#### 1. Configuration Mode (`wifi_config_server.py`)
-- Creates WiFi Access Point (AP_SSID: "ESP_Config")
-- Serves web interface from `frontend/` folder
-- Manages WiFi networks (up to 5 saved networks)
-- Configures Rocrail server settings
-- NeoPixel LED status indicators
-- Potentiometer brightness control
-
-#### 2. Controller Mode (`rocrail_controller.py`)
-- Connects to saved WiFi network
-- Establishes socket connection to Rocrail server
-- Controls locomotive via XML commands
-- Handles potentiometer and button inputs
-- Real-time speed/direction control
-
-## File Structure & Importance
-
-### 🔴 CRITICAL Files (Core Functionality)
-- `boot.py` - System entry point, mode selection
-- `rocrail_controller.py` - Main locomotive control logic
-- `wifi_config_server.py` - Configuration web server (NOT config_web_server.py)
-- `btn_config.py` - Hardware pin assignments
-
-### 🟡 IMPORTANT Library Files (`lib/`)
-- `loco_controller.py` - High-level locomotive control class
-- `button_controller.py` - Button input with debouncing
-- `poti_controller.py` - Potentiometer input filtering
-- `wifi_manager.py` - WiFi connection management
+### Important Libraries (`lib/`)
+- `loco_list.py` - Locomotive management (selection, XML parsing)
+- `button_controller.py` - Debounced button input
+- `poti_controller.py` - Filtered potentiometer reading
 - `interval_timer.py` - Non-blocking timing utilities
-- `neopixel_controller.py` - NeoPixel LED status visualization
 
-### 🟢 CONFIGURATION Files
-- `rocrail_config.py` - Default settings (WiFi, Rocrail, pins, timing)
-- `wifi_networks.txt` - Saved WiFi credentials (JSON format)
-- `rocrail_config.txt` - Rocrail server IP/port
-
-### 🔵 FRONTEND Files (Web Interface)
-- `frontend/index.html` - Configuration web page
-- `frontend/app.js` - JavaScript functionality
-- `frontend/style.css` - Web interface styling
-- `frontend/app_nonminified.js` - Debug version
+### Web Interface (`frontend/`)
+- `index.html`, `app.js`, `style.css` - Configuration web interface
+- `wifi_config_server.py` - Configuration mode web server
 
 ## Hardware Configuration
 
-### Button Assignments (`btn_config.py`)
+### Physical LED Layout (10 NeoPixels)
+- **LED 0**: WiFi symbol - WiFi connection status
+- **LED 1**: "RR" text - RocRail connection status  
+- **LED 2**: "<" symbol - Direction indicator (forward/true)
+- **LED 3**: ">" symbol - Direction indicator (reverse/false)
+- **LED 4**: No text - Activity indicator
+- **LEDs 5-9**: Numbers "1-5" - Locomotive selection
+
+### LED Status Logic
 ```python
+# LED assignments from rocrail_config.py
+LED_WIFI = 0          # WiFi status
+LED_ROCRAIL = 1       # RocRail connection ("RR")
+LED_DIR_LEFT = 2      # Direction "<" (true)
+LED_DIR_RIGHT = 3     # Direction ">" (false)  
+LED_ACTIVITY = 4      # Activity indicator
+LED_LOCO_START = 5    # First locomotive (LEDs 5-9)
+```
+
+**LED 0 (WiFi)**: Green blink (connected), Red blink (disconnected)
+**LED 1 (RocRail)**: Orange (disconnected), Blink orange (connecting), Green (connected), Red (lost)
+**LEDs 2-3 (Direction)**: Yellow when active direction, off when inactive
+**LED 4 (Activity)**: Red blink when inactive (poti=0), off when active
+**LEDs 5-9 (Locos)**: Blue for selected locomotive, all others off (energy saving)
+
+### Button Configuration
+```python
+# From btn_config.py
 BTN_NOTHALT = 17          # Red emergency/config button
-BTN_RICHTUNGSWECHEL = 19  # Green direction/test button
-BTN_GELB = 22             # Yellow button
-BTN_BLAU = 23             # Blue button
-BTN_MITTE_UP = 21         # Black up button
-BTN_MITTE_DOWN = 18       # Black down button
+BTN_RICHTUNGSWECHEL = 19  # Green direction toggle
+BTN_GELB = 22             # Yellow sound/horn
+BTN_BLAU = 23             # Blue light toggle
+BTN_MITTE_UP = 21         # Black up - next locomotive
+BTN_MITTE_DOWN = 18       # Black down - previous locomotive
 ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 ```
 
-### Controller Mode Hardware
-```python
-LIGHT_BUTTON_PIN = 34     # Light on/off
-WHISTLE_BUTTON_PIN = 32   # Horn/whistle
-DIRECTION_BUTTON_PIN = 33 # Direction toggle
-SOUND_BUTTON_PIN = 35     # Sound on/off
-EMERGENCY_BUTTON_PIN = 39 # Emergency stop
-POTI_PIN = 36            # Speed potentiometer
-LED_PIN = 5              # Status LED
-NEOPIXEL_PIN = 2         # 6 NeoPixel LEDs for status
-```
-
-### NeoPixel Status LEDs (Controller Mode)
-- **LED 0 (WiFi Status)**: 
-  - Red blinking (80% brightness) when disconnected
-  - Green blinking when connected (battery saving)
-- **LED 1-5**: Available for additional status indicators
-
 ## Communication Protocol
 
-### Rocrail XML Commands
-The system communicates with Rocrail using XML over TCP socket:
-
+**RocRail XML Commands** (TCP socket):
 ```xml
 <!-- Speed Control -->
 <xmlh><xml size="35"/></xmlh><lc id="BR103" V="50" dir="true"/>
-
-<!-- Light Control -->
+<!-- Light Control -->  
 <xmlh><xml size="28"/></xmlh><fn id="BR103" fn0="true"/>
-
-<!-- Emergency Stop -->
-<xmlh><xml size="32"/></xmlh><lc id="BR103" V="0" dir="true"/>
 ```
 
-## Development Workflow
+**Connection Status Tracking**:
+- Monitors both successful sends and received data
+- Status updates on socket errors or server disconnection
+- Automatic recovery when communication resumes
 
-### 🔧 Key Files for Development Tasks
+## Key Development Areas
 
-#### Modifying Control Logic
-1. `rocrail_controller.py` - Main control loop
-2. `lib/loco_controller.py` - Locomotive command abstraction
-3. `rocrail_config.py` - Default settings
+### NeoPixel Control (`lib/neopixel_controller.py`)
+- `wifi_status_led()` - WiFi connection blinking
+- `rocrail_status_led()` - RocRail 4-state status  
+- `direction_indicator_leds()` - Direction arrows
+- `activity_indicator_led()` - Activity monitoring
+- `update_locomotive_display()` - Loco selection (LEDs 5-9)
 
-#### Adding Hardware Components
-1. `btn_config.py` - Pin assignments
-2. `lib/button_controller.py` - Button handling
-3. `lib/poti_controller.py` - Analog input
+### Main Control Loop (`rocrail_controller.py`)
+- Socket communication with error handling
+- Button debouncing and state management
+- Speed/direction control with safety features
+- Locomotive selection and XML parsing
+- Status LED updates with timing intervals
 
-#### Web Interface Changes
-1. `frontend/index.html` - UI structure
-2. `frontend/app.js` - Client logic
-3. `wifi_config_server.py` - API endpoints
+### Configuration (`rocrail_config.py`)
+- WiFi credentials and RocRail server settings
+- Timing intervals and hardware pin assignments
+- LED assignments and locomotive limits
 
-#### Network/WiFi Features
-1. `lib/wifi_manager.py` - Connection management
-2. `wifi_config_server.py` - AP and web server
+## Development Commands
 
-### 🚫 Files to AVOID Modifying (Unless Necessary)
-- `frontend/app_nonminified.js` - Debug version only
-- `wifi_networks.txt` - Generated by web interface
-- `rocrail_config.txt` - Generated by web interface
-
-## Memory Optimization
-
-The project uses several memory optimization techniques:
-- Stream file serving in chunks (4KB)
-- Garbage collection in main loops
-- Response caching with timeouts
-- Buffer size limits for socket communication
-
-## API Endpoints (Configuration Mode)
-
+### Commit Message Format
+Always create precise, descriptive commit messages:
 ```
-GET  /api/status          - Device info and status
-GET  /api/networks        - Scan WiFi networks
-GET  /api/wifi-networks   - Get saved networks
-POST /api/wifi-networks   - Add/update network
-DELETE /api/wifi-networks/{ssid} - Remove network
-GET  /api/rocrail         - Get Rocrail config
-POST /api/rocrail         - Save Rocrail config
-POST /api/test           - Test WiFi connection
-POST /api/restart        - Restart device
+feat: Add new functionality
+fix: Correct existing issue  
+refactor: Code restructure without behavior change
+docs: Documentation updates
 ```
 
-## Common Development Tasks
+### README Maintenance
+Update `README_DEVELOPMENT.md` when:
+- Adding new hardware features or LED functions
+- Changing core system behavior or architecture
+- Learning new project requirements or constraints
+- Modifying file structure or critical dependencies
 
-### Adding New Button Functions
-1. Add pin definition to `btn_config.py`
-2. Create ButtonController in `rocrail_controller.py`
-3. Add check in main loop with timer interval
-4. Implement XML command in locomotive controller
+### Common Tasks
+**Adding LED Functions**: Update `neopixel_controller.py` methods and `rocrail_config.py` constants
+**Button Integration**: Add to `btn_config.py`, create `ButtonController` in main loop
+**XML Commands**: Implement in send functions with error handling and status updates
 
-### Modifying Speed Control
-1. Edit `lib/poti_controller.py` for input processing
-2. Modify speed mapping in `rocrail_controller.py`
-3. Update timing intervals in `rocrail_config.py`
+## Current Status
+- 10 LED system fully implemented with physical labels
+- RocRail connection tracking via send/receive monitoring  
+- Direction indicators synchronized with locomotive state
+- Energy-efficient locomotive display (only selected LED active)
+- Robust error handling and automatic recovery
 
-### Adding New Locomotive Commands
-1. Add method to `lib/loco_controller.py`
-2. Define XML command format
-3. Add button/trigger in main controller
-
-## Debugging & Monitoring
-
-### Status Indicators
-- **NeoPixel LEDs** (Configuration mode):
-  - LED 0: Configuration started (green)
-  - LED 1: AP status (green=active)
-  - LED 2: Connection activity (blue/yellow)
-  - LED 3: Error status (red)
-  - LED 4: WiFi connected (green)
-  - LED 5: Temperature (green/yellow/red)
-
-- **Onboard LED** (Controller mode):
-  - Flash on successful command transmission
-
-### Error Handling
-- Error logging to `error_log.txt` in configuration mode
-- Console output for debugging
-- Automatic reconnection attempts
-- Graceful degradation on component failures
-
-## Next Steps for Development
-
-1. **Fix Boot Bug**: Correct green button detection in `boot.py`
-2. **Complete Test Mode**: Implement test functionality
-3. **Add Locomotive Selection**: Multiple locomotive support
-4. **Enhanced Error Recovery**: Better connection handling
-5. **Configuration Validation**: Input validation improvements
-
-This guide provides the foundation for understanding and developing the locomotive controller system. Focus on the CRITICAL and IMPORTANT files for most development tasks.
+Focus development on `rocrail_controller.py` for control logic and `lib/neopixel_controller.py` for status visualization.
