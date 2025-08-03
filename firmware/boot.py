@@ -32,10 +32,7 @@ red_button   = Pin(BTN_NOTHALT, Pin.IN, Pin.PULL_UP)
 green_button = Pin(BTN_RICHTUNGSWECHEL, Pin.IN, Pin.PULL_UP)
 
 # Small delay to allow button state to stabilize
-for i in range(5):
-#     time.sleep_ms(200
-    print(f"{5-i}...")
-    time.sleep(1)
+time.sleep_ms(200)
 
 # Check if button is pressed (LOW when using pull-up)
 if not red_button.value():

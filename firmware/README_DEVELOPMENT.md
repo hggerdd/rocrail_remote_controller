@@ -11,7 +11,9 @@ MicroPython ESP32 locomotive controller for Rocrail model railway systems. Batte
 ## Core Files Structure
 
 ### Critical Files
-- `rocrail_controller.py` - Main locomotive control logic and socket communication
+- `rocrail_controller.py` - Main control loop and WiFi management (~320 lines, refactored)
+- `lib/protocol/rocrail_protocol.py` - RocRail TCP/XML protocol communication
+- `lib/core/controller_state.py` - System state management and safety logic
 - `lib/neopixel_controller.py` - 10 LED status visualization controller
 - `rocrail_config.py` - Configuration constants including LED assignments
 - `btn_config.py` - Hardware pin definitions
@@ -82,6 +84,11 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 
 ## Key Development Areas
 
+### Core Architecture (`lib/protocol/`, `lib/core/`)
+- `RocrailProtocol` - TCP socket management, XML message creation/parsing, connection monitoring
+- `ControllerStateMachine` - WiFi/RocRail/speed states, safety mechanisms, event coordination
+- Modular design enables better testing and maintenance
+
 ### NeoPixel Control (`lib/neopixel_controller.py`)
 - `wifi_status_led()` - WiFi connection blinking
 - `rocrail_status_led()` - RocRail 4-state status  
@@ -90,12 +97,10 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - `update_locomotive_display()` - Loco selection (LEDs 5-9)
 
 ### Main Control Loop (`rocrail_controller.py`)
-- Socket communication with error handling
-- Button debouncing and state management
-- Speed/direction control with safety features
-- Locomotive selection and XML parsing
-- Status LED updates with timing intervals
-- Robust WiFi monitoring and automatic reconnection with interface reset capability
+- WiFi management with robust reconnection and interface reset
+- Hardware controller integration (buttons, potentiometer, LEDs)
+- System orchestration using RocrailProtocol and ControllerStateMachine classes
+- Timing-based event processing with safety mechanisms
 
 ### Configuration (`rocrail_config.py`)
 - WiFi credentials and RocRail server settings
@@ -127,6 +132,8 @@ Update `README_DEVELOPMENT.md` when:
 **XML Commands**: Implement in send functions with error handling and status updates
 
 ## Current Status
+- Modular architecture implemented: `RocrailProtocol` and `ControllerStateMachine` classes
+- Main controller reduced from ~700 to ~320 lines through code extraction
 - 10 LED system fully implemented with physical labels
 - RocRail connection tracking via send/receive monitoring  
 - Direction indicators synchronized with locomotive state
@@ -134,7 +141,7 @@ Update `README_DEVELOPMENT.md` when:
 - Robust error handling and automatic recovery
 - Advanced WiFi management with interface reset and graceful recovery from internal errors
 
-Focus development on `rocrail_controller.py` for control logic and `lib/neopixel_controller.py` for status visualization.
+Focus development on `lib/protocol/rocrail_protocol.py` for communication logic, `lib/core/controller_state.py` for state management, and `rocrail_controller.py` for system orchestration.
 
 ## Development Planning
 See `TASKS.md` for comprehensive task list, priorities, and development roadmap. Tasks are categorized by urgency (Critical/Medium/Low) with effort estimates and dependencies tracked.
