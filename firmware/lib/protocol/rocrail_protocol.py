@@ -9,8 +9,9 @@ class RocrailProtocol:
     Manages XML message creation, sending, and receiving.
     """
     
-    def __init__(self, loco_list):
+    def __init__(self, loco_list, display_update_callback=None):
         self.loco_list = loco_list
+        self.display_update_callback = display_update_callback
         
         # Socket connection variables
         self.socket_client = None
@@ -158,6 +159,9 @@ class RocrailProtocol:
             # Check for locomotive list response
             if 'lclist' in self.xml_buffer.lower() or '<lc ' in self.xml_buffer:
                 if self.loco_list.update_from_rocrail_response(self.xml_buffer):
+                    # Call display update callback if provided
+                    if self.display_update_callback:
+                        self.display_update_callback()
                     self.locomotive_query_pending = False
                     self.locomotive_query_start_time = 0
                     self.locomotives_loaded = True  # Stop further locomotive queries
@@ -165,6 +169,9 @@ class RocrailProtocol:
             # Check for complete model response
             elif self.locomotive_query_pending and ('</model>' in self.xml_buffer or '</xmlh>' in self.xml_buffer):
                 if self.loco_list.update_from_rocrail_response(self.xml_buffer):
+                    # Call display update callback if provided
+                    if self.display_update_callback:
+                        self.display_update_callback()
                     self.locomotives_loaded = True  # Stop further locomotive queries
                 self.locomotive_query_pending = False
                 self.locomotive_query_start_time = 0

@@ -23,10 +23,6 @@ loco_list = LocoList(LOCO_LIST_FILE)
 loco_dir = "true"
 loco_light = "false"
 
-# Initialize protocol and state management
-rocrail_protocol = RocrailProtocol(loco_list)
-state_machine = ControllerStateMachine()
-
 # Initialize hardware controllers
 speed_poti = PotiController(pin_num=ADC_GESCHWINDIGKEIT, filter_size=5, threshold=1)
 light_button = ButtonController(pin_num=BTN_BLAU, debounce_ms=5)
@@ -40,6 +36,17 @@ btn_down = ButtonController(pin_num=BTN_MITTE_DOWN, debounce_ms=5)
 
 # Initialize NeoPixel controller - turns off all LEDs at startup
 neopixel_ctrl = NeoPixelController(pin_num=NEOPIXEL_PIN, num_leds=NEOPIXEL_COUNT)
+
+def update_locomotive_display():
+    """Update NeoPixel display to show current locomotive selection"""
+    selected_index = loco_list.get_selected_index()
+    total_locos = loco_list.get_count()
+    neopixel_ctrl.update_locomotive_display(selected_index, total_locos)
+    print(loco_list.get_status_string())
+
+# Initialize protocol and state management
+rocrail_protocol = RocrailProtocol(loco_list, update_locomotive_display)
+state_machine = ControllerStateMachine()
 
 # Set initial LED states before any connections
 # WiFi indicator: initial orange (before attempting connection)
@@ -182,12 +189,7 @@ def reconnect_wifi(state_machine):
 
 
 
-def update_locomotive_display():
-    """Update NeoPixel display to show current locomotive selection"""
-    selected_index = loco_list.get_selected_index()
-    total_locos = loco_list.get_count()
-    neopixel_ctrl.update_locomotive_display(selected_index, total_locos)
-    print(loco_list.get_status_string())
+
 
 def handle_locomotive_selection(state_machine, rocrail_protocol):
     """Handle locomotive selection button presses"""
