@@ -23,8 +23,8 @@ wlan = None
 
 # RocRail connection status tracking
 rocrail_status = "disconnected"  # States: "disconnected", "connecting", "connected", "lost"
-last_rocrail_data_time = 0
-ROCRAIL_DATA_TIMEOUT = 5000  # 5 seconds in milliseconds
+last_rocrail_activity_time = 0  # Track both sends and receives
+last_rocrail_send_success = True  # Track if last send was successful
 
 sending_speed_enabled = True
 
@@ -89,7 +89,7 @@ def connect_wifi(ssid, password, max_retries=10):
         return False
 
 def socket_listener():
-    global socket_client, data_callback, running
+    global socket_client, data_callback, running, rocrail_status, last_rocrail_activity_time, last_rocrail_send_success
     
     print("Socket listener started")
     
@@ -101,6 +101,7 @@ def socket_listener():
                     data_callback(data)
             else:
                 print("Connection closed by server")
+                rocrail_status = "lost"
                 break
         except:
             # Any socket error - continue with small delay
@@ -118,7 +119,7 @@ def start_socket_connection(host, port, callback_function):
         port: Server port
         callback_function: Function to call when data is received
     """
-    global socket_client, data_callback, running, rocrail_status
+    global socket_client, data_callback, running, rocrail_status, last_rocrail_activity_time, last_rocrail_send_success
     
     # Set connecting status
     rocrail_status = "connecting"
@@ -135,6 +136,8 @@ def start_socket_connection(host, port, callback_function):
         
         # Connection successful
         rocrail_status = "connected"
+        last_rocrail_activity_time = time.ticks_ms()
+        last_rocrail_send_success = True
         
         # Start listener thread
         _thread.start_new_thread(socket_listener, ())
@@ -167,10 +170,17 @@ def stop_socket_connection():
 
 def handle_data(data):
     """Callback function for processing received data"""
-    global xml_buffer, locomotive_query_pending, locomotive_query_start_time, locomotives_loaded, last_rocrail_data_time
+    global xml_buffer, locomotive_query_pending, locomotive_query_start_time, locomotives_loaded, last_rocrail_activity_time, rocrail_status
     
-    # Update last data received time
-    last_rocrail_data_time = time.ticks_ms()
+    # Update last activity time (data received)
+    last_rocrail_activity_time = time.ticks_ms()
+    
+    # If we receive data, connection is definitely working - restore status if lost
+    if rocrail_status == "lost":
+        rocrail_status = "connected"
+        print("RocRail connection restored - data received")
+    elif rocrail_status != "connected":
+        rocrail_status = "connected"
     
     # Simple decode without keyword arguments for MicroPython compatibility
     try:
@@ -205,7 +215,7 @@ def handle_data(data):
 
 def send_poti_value(speed, direction):
     """Send potentiometer value through the socket connection in Rocrail RCP XML format to set the speed of the selected locomotive"""
-    global socket_client
+    global socket_client, rocrail_status, last_rocrail_activity_time, last_rocrail_send_success
     
     current_loco_id = loco_list.get_selected_id()
     if not current_loco_id:
@@ -219,14 +229,22 @@ def send_poti_value(speed, direction):
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
             
+            # Track successful send
+            last_rocrail_activity_time = time.ticks_ms()
+            last_rocrail_send_success = True
+            if rocrail_status != "connected":
+                rocrail_status = "connected"
+            
             return True
         except Exception as e:
             print(f"Send error: {e}")
+            last_rocrail_send_success = False
+            rocrail_status = "lost"
             return False
     return False
 
 def send_light_status(light_on_off):
-    global socket_client
+    global socket_client, rocrail_status, last_rocrail_activity_time, last_rocrail_send_success
     
     current_loco_id = loco_list.get_selected_id()
     if not current_loco_id:
@@ -239,15 +257,23 @@ def send_light_status(light_on_off):
             message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
             
+            # Track successful send
+            last_rocrail_activity_time = time.ticks_ms()
+            last_rocrail_send_success = True
+            if rocrail_status != "connected":
+                rocrail_status = "connected"
+            
             return True
         except Exception as e:
             print(f"Send error: {e}")
+            last_rocrail_send_success = False
+            rocrail_status = "lost"
             return False
     return False
 
 def query_locomotives():
     """Query all locomotives from RocRail server using specific locomotive list command"""
-    global socket_client, locomotive_query_pending, locomotive_query_start_time
+    global socket_client, locomotive_query_pending, locomotive_query_start_time, rocrail_status, last_rocrail_activity_time, last_rocrail_send_success
     
     if socket_client:
         try:
@@ -256,6 +282,12 @@ def query_locomotives():
             message_len = len(message)
             message_and_header = f'<xmlh><xml size="{message_len}" name="model"/></xmlh>{message}'
             socket_client.send(message_and_header.encode())
+            
+            # Track successful send
+            last_rocrail_activity_time = time.ticks_ms()
+            last_rocrail_send_success = True
+            if rocrail_status != "connected":
+                rocrail_status = "connected"
             
             # Set flag to indicate we're expecting locomotive data
             locomotive_query_pending = True
@@ -268,6 +300,8 @@ def query_locomotives():
             print(f"Query error: {e}")
             locomotive_query_pending = False
             locomotive_query_start_time = 0
+            last_rocrail_send_success = False
+            rocrail_status = "lost"
             return False
     return False
 
@@ -378,15 +412,6 @@ if run:
                         neopixel_ctrl.wifi_status_led(wlan.isconnected(), wifi_blink_toggle)
                         # Update RocRail status LED
                         neopixel_ctrl.rocrail_status_led(rocrail_status, rocrail_blink_toggle)
-                    
-                    # Check RocRail connection health
-                    if timer.is_ready("check_rocrail_health", 1000):  # Check every second
-                        if rocrail_status == "connected" and last_rocrail_data_time > 0:
-                            # Check if we haven't received data in the last 5 seconds
-                            time_since_last_data = time.ticks_diff(time.ticks_ms(), last_rocrail_data_time)
-                            if time_since_last_data > ROCRAIL_DATA_TIMEOUT:
-                                rocrail_status = "lost"
-                                print("RocRail connection lost - no data received in 5 seconds")
                     
                     # Handle locomotive selection buttons
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
