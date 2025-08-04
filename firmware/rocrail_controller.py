@@ -45,8 +45,10 @@ def update_locomotive_display():
     print(loco_list.get_status_string())
 
 # Initialize protocol and state management
+print("[LOCO_DEBUG] Initializing RocrailProtocol with locomotive list and display callback...")
 rocrail_protocol = RocrailProtocol(loco_list, update_locomotive_display)
 state_machine = ControllerStateMachine()
+print(f"[LOCO_DEBUG] RocrailProtocol initialized - callback set: {rocrail_protocol.display_update_callback is not None}")
 
 # Set initial LED states before any connections
 # WiFi indicator: initial orange (before attempting connection)
@@ -218,19 +220,21 @@ def handle_locomotive_selection(state_machine, rocrail_protocol):
         print("Locomotive changed - POTI ZERO REQUIRED (purple LED blinking)")
 
 def initialize_locomotive_list(rocrail_protocol):
-    """Initialize locomotive list - load from file or query from RocRail"""
+    """Initialize locomotive list - load from file and query from RocRail for updates"""
     
     if loco_list.get_count() == 0:
-        # No locomotives loaded, add default and query for more
-        print("No saved locomotives - querying RocRail...")
+        # No locomotives loaded, add default
+        print("No saved locomotives - adding default and querying RocRail...")
         loco_list.add_locomotive(DEFAULT_LOCO_ID)
         loco_list.save_to_file()
-        rocrail_protocol.query_locomotives()
     else:
         print(f"Loaded {loco_list.get_count()} locomotives from file")
-        rocrail_protocol.set_locomotives_loaded(True)  # We have locomotives, stop querying
     
-    # Update display
+    # Always query RocRail for latest locomotive list (don't set locomotives_loaded=True from file)
+    print("Querying RocRail for current locomotive list...")
+    rocrail_protocol.query_locomotives()
+    
+    # Update display with current locomotives (from file or default)
     update_locomotive_display()
 
 # Main program
@@ -269,7 +273,8 @@ if run:
                     # Check for locomotive query timeout (only if still loading locomotives)
                     if not rocrail_protocol.are_locomotives_loaded() and rocrail_protocol.is_query_pending() and rocrail_protocol.get_query_start_time() > 0:
                         if time.ticks_diff(time.ticks_ms(), rocrail_protocol.get_query_start_time()) > LOCO_QUERY_TIMEOUT:
-                            print("Locomotive query timeout - no response received")
+                            print("[LOCO_DEBUG] Locomotive query timeout - no response received")
+                            print(f"[LOCO_DEBUG] Timeout after {LOCO_QUERY_TIMEOUT}ms, resetting query state")
                             rocrail_protocol.reset_query_state()
                     
                     if timer.is_ready("check_wifi_update", WIFI_CHECK_INTERVAL):
@@ -314,7 +319,10 @@ if run:
                     # Query locomotives periodically only if we haven't loaded them yet
                     if not rocrail_protocol.are_locomotives_loaded() and timer.is_ready("query_locomotives", LOCO_QUERY_INTERVAL):
                         if not rocrail_protocol.is_query_pending():  # Only query if not already waiting for response
+                            print("[LOCO_DEBUG] Periodic locomotive query - sending request...")
                             rocrail_protocol.query_locomotives()
+                        else:
+                            print(f"[LOCO_DEBUG] Locomotive query already pending (started: {rocrail_protocol.get_query_start_time()})")
                     
                     # regularly update the poti/button input controller (required to have enough values for mean)
                     if timer.is_ready("send_poti_update", POTI_UPDATE_INTERVAL):

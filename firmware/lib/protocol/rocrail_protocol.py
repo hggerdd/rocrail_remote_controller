@@ -2,6 +2,14 @@ import socket
 import time
 import _thread
 
+# Debug control - set to False to disable debug output
+DEBUG_LOCOMOTIVE_LOADING = True
+
+def debug_print(message):
+    """Print debug message if debug mode is enabled"""
+    if DEBUG_LOCOMOTIVE_LOADING:
+        print(f"[LOCO_DEBUG] {message}")
+
 
 class RocrailProtocol:
     """
@@ -151,34 +159,61 @@ class RocrailProtocol:
         except:
             data_str = str(data)  # Fallback if decode fails
         
+        # Debug: Print received data
+        debug_print(f"Received data ({len(data_str)} chars): {data_str[:200]}...")
+        
         # Accumulate XML data in buffer
         self.xml_buffer += data_str
         
+        # Debug: Print current buffer state
+        debug_print(f"XML buffer size: {len(self.xml_buffer)}, locomotives_loaded: {self.locomotives_loaded}")
+        
         # Only process locomotive data if we haven't loaded locomotives yet
         if not self.locomotives_loaded:
+            debug_print("Processing locomotive data...")
+            
             # Check for locomotive list response
             if 'lclist' in self.xml_buffer.lower() or '<lc ' in self.xml_buffer:
+                debug_print("Found lclist or <lc> in buffer, trying to parse...")
                 if self.loco_list.update_from_rocrail_response(self.xml_buffer):
+                    debug_print("Successfully parsed locomotive data from RocRail!")
                     # Call display update callback if provided
                     if self.display_update_callback:
+                        debug_print("Calling display update callback...")
                         self.display_update_callback()
+                    else:
+                        debug_print("WARNING: No display update callback set!")
                     self.locomotive_query_pending = False
                     self.locomotive_query_start_time = 0
                     self.locomotives_loaded = True  # Stop further locomotive queries
+                else:
+                    debug_print("Failed to parse locomotive data from buffer")
             
             # Check for complete model response
             elif self.locomotive_query_pending and ('</model>' in self.xml_buffer or '</xmlh>' in self.xml_buffer):
+                debug_print("Found complete model response, trying to parse...")
                 if self.loco_list.update_from_rocrail_response(self.xml_buffer):
+                    debug_print("Successfully parsed locomotive data from model response!")
                     # Call display update callback if provided
                     if self.display_update_callback:
+                        debug_print("Calling display update callback...")
                         self.display_update_callback()
+                    else:
+                        debug_print("WARNING: No display update callback set!")
                     self.locomotives_loaded = True  # Stop further locomotive queries
+                else:
+                    debug_print("Failed to parse locomotive data from model response")
                 self.locomotive_query_pending = False
                 self.locomotive_query_start_time = 0
+            else:
+                debug_print("No locomotive data patterns found in buffer yet")
+        else:
+            debug_print("Locomotives already loaded, ignoring received data")
         
         # Prevent buffer from growing too large
         if len(self.xml_buffer) > 8192:  # 8KB limit
             self.xml_buffer = self.xml_buffer[-4096:]  # Keep only the last 4KB
+            debug_print("XML buffer truncated to prevent memory issues")
     
     def send_speed_and_direction(self, speed, direction):
         """Send locomotive speed and direction via RocRail RCP XML format"""
@@ -237,12 +272,16 @@ class RocrailProtocol:
     
     def query_locomotives(self):
         """Query all locomotives from RocRail server using specific locomotive list command"""
+        debug_print(f"query_locomotives called - socket_client: {self.socket_client is not None}")
+        
         if self.socket_client:
             try:
                 # Send specific locomotive list command (as used in other programs)
                 message = '<model cmd="lclist"/>'
                 message_len = len(message)
                 message_and_header = f'<xmlh><xml size="{message_len}" name="model"/></xmlh>{message}'
+                
+                debug_print(f"Sending locomotive query: {message_and_header}")
                 self.socket_client.send(message_and_header.encode())
                 
                 # Track successful send
@@ -255,7 +294,8 @@ class RocrailProtocol:
                 self.locomotive_query_pending = True
                 self.locomotive_query_start_time = time.ticks_ms()
                 
-                print("Querying locomotives from RocRail...")
+                debug_print("Locomotive query sent successfully!")
+                debug_print(f"Query pending: {self.locomotive_query_pending}, Start time: {self.locomotive_query_start_time}")
                 
                 return True
             except Exception as e:
@@ -265,4 +305,6 @@ class RocrailProtocol:
                 self.last_rocrail_send_success = False
                 self.rocrail_status = "lost"
                 return False
+        else:
+            debug_print("Cannot query locomotives - no socket connection")
         return False
