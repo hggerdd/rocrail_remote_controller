@@ -172,8 +172,6 @@ class LocoList:
         try:
             # Debug: Print what we're trying to parse
             print(f"[LOCO_PARSE] Attempting to parse {len(xml_response)} chars")
-            print(f"[LOCO_PARSE] Buffer starts with: {xml_response[:100]}...")
-            print(f"[LOCO_PARSE] Buffer ends with: ...{xml_response[-100:]}")
             
             # Check if we have a complete lclist structure
             if '<lclist>' not in xml_response or '</lclist>' not in xml_response:
@@ -191,139 +189,209 @@ class LocoList:
             lclist_section = xml_response[start_idx:end_idx]
             print(f"[LOCO_PARSE] Extracted lclist section: {len(lclist_section)} chars")
             
-            # Simple string-based parsing for locomotive entries
-            locomotives_found = []
+            # Use the new intelligent locomotive extraction
+            extraction_result = self.extract_locomotives_from_lclist(lclist_section)
+            locomotives_found = extraction_result['locomotives']
             
-            # Look for locomotive entries using string methods
-            text = lclist_section
-            start_pos = 0
-            while True:
-                # Find <lc id=" pattern
-                lc_pos = text.find('<lc ', start_pos)
-                if lc_pos == -1:
-                    break
-                    
-                # Find id=" after the <lc
-                id_pos = text.find('id="', lc_pos)
-                if id_pos == -1:
-                    start_pos = lc_pos + 4
-                    continue
-                    
-                # Find the end quote
-                id_start = id_pos + 4
-                id_end = text.find('"', id_start)
-                if id_end == -1:
-                    start_pos = lc_pos + 4
-                    continue
-                
-                # Extract locomotive ID
-                loco_id = text[id_start:id_end].strip()
-                if loco_id:
-                    locomotives_found.append(loco_id)
-                    print(f"[LOCO_PARSE] Found locomotive: {loco_id}")
-                
-                start_pos = id_end
+            print(f"[LOCO_PARSE] Extraction result: {extraction_result['total_found']} locomotives from {extraction_result['entries_processed']} entries")
             
-            print(f"[LOCO_PARSE] Total locomotives found: {len(locomotives_found)}")
-            
-            # Filter out duplicates and invalid entries
-            unique_locomotives = []
-            for loco_id in locomotives_found:
-                if (loco_id and 
-                    len(loco_id) > 0 and 
-                    loco_id not in unique_locomotives and
-                    not loco_id.startswith('xml') and
-                    not loco_id.startswith('query') and
-                    not loco_id.startswith('model') and
-                    loco_id != 'model'):  # Filter out system entries
-                    unique_locomotives.append(loco_id)
-            
-            print(f"[LOCO_PARSE] Unique locomotives: {unique_locomotives}")
-            
-            if unique_locomotives:
+            if locomotives_found:
                 # Clear existing list and add new locomotives
                 old_count = len(self.locomotives)
                 self.clear()
                 
                 # Add locomotives (up to max limit)
                 added = 0
-                for loco_id in unique_locomotives:
-                    if self.add_locomotive(loco_id):
+                for loco_info in locomotives_found:
+                    if self.add_locomotive(loco_info['id'], loco_info['name']):
                         added += 1
+                        print(f"[LOCO_PARSE] Added: {loco_info['name']} (ID: {loco_info['id']})")
                         if added >= self.max_locos:
+                            print(f"[LOCO_PARSE] Reached maximum locomotives limit ({self.max_locos})")
                             break
                 
                 # Save updated list if we added any
                 if added > 0:
                     self.save_to_file()
-                    print(f"[LOCO_PARSE] Successfully updated locomotive list: {old_count} -> {added} locos")
-                    print(f"[LOCO_PARSE] Locomotives: {', '.join([loco['id'] for loco in self.locomotives])}")
+                    print(f"[LOCO_PARSE] ✅ Successfully updated locomotive list: {old_count} -> {added} locos")
+                    print(f"[LOCO_PARSE] Final list: {', '.join([loco['name'] for loco in self.locomotives])}")
                     return True
                 else:
-                    print("[LOCO_PARSE] No locomotives were added")
+                    print("[LOCO_PARSE] ❌ No locomotives were added to the list")
                     return False
             else:
-                print("[LOCO_PARSE] No valid locomotives found")
+                print("[LOCO_PARSE] ❌ No valid locomotives found in lclist")
                 return False
                 
         except Exception as e:
-            print(f"[LOCO_PARSE] Error parsing locomotives: {e}")
+            print(f"[LOCO_PARSE] ❌ Error parsing locomotives: {e}")
             return False
         finally:
             gc.collect()
     
-    def extract_locomotives_streaming(self, xml_fragment):
-        """Extract locomotives from XML fragment without waiting for complete structure
+    def extract_locomotives_from_lclist(self, lclist_xml):
+        """Extract locomotives specifically from lclist XML (locomotive definitions, not status updates)
         
         Args:
-            xml_fragment: XML string fragment that may contain locomotive entries
+            lclist_xml: XML string containing lclist structure
             
         Returns:
-            List of locomotive IDs found in this fragment
+            Dict with locomotive information: {'locomotives': [list], 'total_found': int}
         """
         try:
             locomotives_found = []
             
-            # Look for locomotive entries using string methods
-            text = xml_fragment
+            print(f"[LOCO_EXTRACT] Processing lclist XML: {len(lclist_xml)} chars")
+            print(f"[LOCO_EXTRACT] Sample: {lclist_xml[:200]}...")
+            
+            # Look for locomotive definition entries (not status updates)
+            text = lclist_xml
             start_pos = 0
+            loco_count = 0
+            
             while True:
-                # Find <lc id=" pattern
+                # Find <lc entry
                 lc_pos = text.find('<lc ', start_pos)
                 if lc_pos == -1:
                     break
-                    
-                # Find id=" after the <lc
-                id_pos = text.find('id="', lc_pos)
-                if id_pos == -1:
-                    start_pos = lc_pos + 4
-                    continue
-                    
-                # Find the end quote
-                id_start = id_pos + 4
-                id_end = text.find('"', id_start)
-                if id_end == -1:
-                    start_pos = lc_pos + 4
-                    continue
                 
-                # Extract locomotive ID
-                loco_id = text[id_start:id_end].strip()
-                if (loco_id and 
-                    len(loco_id) > 0 and 
-                    not loco_id.startswith('xml') and
-                    not loco_id.startswith('query') and
-                    not loco_id.startswith('model') and
-                    loco_id != 'model'):  # Filter out system entries
-                    locomotives_found.append(loco_id)
-                    print(f"[LOCO_STREAM] Found locomotive: {loco_id}")
+                # Find the end of this locomotive entry (either /> or </lc> or next <lc)
+                entry_end = text.find('/>', lc_pos)
+                next_lc = text.find('<lc ', lc_pos + 4)
                 
-                start_pos = id_end
+                # Determine the actual end of this entry
+                if entry_end != -1 and (next_lc == -1 or entry_end < next_lc):
+                    lc_entry = text[lc_pos:entry_end + 2]
+                elif next_lc != -1:
+                    lc_entry = text[lc_pos:next_lc]
+                else:
+                    # Take rest of text
+                    lc_entry = text[lc_pos:]
+                
+                loco_count += 1
+                print(f"[LOCO_EXTRACT] Processing locomotive entry {loco_count}: {lc_entry[:100]}...")
+                
+                # Extract locomotive information from this entry
+                loco_info = self._extract_loco_info_from_entry(lc_entry)
+                if loco_info:
+                    locomotives_found.append(loco_info)
+                    print(f"[LOCO_EXTRACT] ✓ Found locomotive: {loco_info}")
+                else:
+                    print(f"[LOCO_EXTRACT] ✗ Could not extract info from entry")
+                
+                # Move to next entry
+                if next_lc != -1:
+                    start_pos = next_lc
+                else:
+                    break
             
-            return locomotives_found
+            print(f"[LOCO_EXTRACT] Total entries processed: {loco_count}")
+            print(f"[LOCO_EXTRACT] Valid locomotives extracted: {len(locomotives_found)}")
+            
+            return {
+                'locomotives': locomotives_found,
+                'total_found': len(locomotives_found),
+                'entries_processed': loco_count
+            }
                 
         except Exception as e:
-            print(f"[LOCO_STREAM] Error in streaming extraction: {e}")
-            return []
+            print(f"[LOCO_EXTRACT] Error extracting locomotives: {e}")
+            return {'locomotives': [], 'total_found': 0, 'entries_processed': 0}
+    
+    def _extract_loco_info_from_entry(self, lc_entry):
+        """Extract locomotive info from a single <lc> entry
+        
+        Args:
+            lc_entry: Single locomotive XML entry
+            
+        Returns:
+            Dict with locomotive info or None if not a valid locomotive definition
+        """
+        try:
+            # Check if this is a locomotive definition (not a status update)
+            # Locomotive definitions have attributes like: image, roadname, desc, dectype
+            # Status updates have attributes like: V, dir, server, placing
+            
+            has_definition_attrs = any(attr in lc_entry for attr in [
+                'image=', 'roadname=', 'desc=', 'dectype=', 'owner=', 'color=', 'number='
+            ])
+            
+            has_status_attrs = any(attr in lc_entry for attr in [
+                'V=', 'dir=', 'server=', 'placing=', 'runtime=', 'throttleid='
+            ])
+            
+            # Skip status updates - we only want locomotive definitions
+            if has_status_attrs and not has_definition_attrs:
+                print(f"[LOCO_EXTRACT] Skipping status update entry")
+                return None
+            
+            # Extract ID (primary identifier)
+            loco_id = self._extract_attribute(lc_entry, 'id')
+            
+            # Extract shortid (secondary identifier)
+            loco_shortid = self._extract_attribute(lc_entry, 'shortid')
+            
+            # Extract additional info
+            loco_roadname = self._extract_attribute(lc_entry, 'roadname')
+            loco_number = self._extract_attribute(lc_entry, 'number')
+            
+            # Determine the best identifier
+            identifier = None
+            display_name = None
+            
+            if loco_id and loco_id.strip() and loco_id != 'model':
+                identifier = loco_id.strip()
+                display_name = identifier
+            elif loco_shortid and loco_shortid.strip():
+                identifier = loco_shortid.strip()
+                display_name = identifier
+            
+            # Enhance display name with additional info
+            if identifier and loco_roadname and loco_roadname.strip():
+                display_name = f"{identifier} ({loco_roadname.strip()})"
+            elif identifier and loco_number and loco_number.strip():
+                display_name = f"{identifier} #{loco_number.strip()}"
+            
+            if identifier:
+                return {
+                    'id': identifier,
+                    'name': display_name or identifier,
+                    'shortid': loco_shortid or '',
+                    'roadname': loco_roadname or '',
+                    'number': loco_number or ''
+                }
+            else:
+                print(f"[LOCO_EXTRACT] No valid identifier found in entry")
+                return None
+                
+        except Exception as e:
+            print(f"[LOCO_EXTRACT] Error processing locomotive entry: {e}")
+            return None
+    
+    def _extract_attribute(self, xml_text, attr_name):
+        """Extract attribute value from XML text
+        
+        Args:
+            xml_text: XML text containing the attribute
+            attr_name: Name of attribute to extract
+            
+        Returns:
+            Attribute value or None if not found
+        """
+        try:
+            pattern = f'{attr_name}="'
+            start_pos = xml_text.find(pattern)
+            if start_pos == -1:
+                return None
+            
+            value_start = start_pos + len(pattern)
+            value_end = xml_text.find('"', value_start)
+            if value_end == -1:
+                return None
+            
+            return xml_text[value_start:value_end]
+        except:
+            return None
     
     def get_status_string(self):
         """Get status string for debugging

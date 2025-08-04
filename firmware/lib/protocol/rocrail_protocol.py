@@ -172,16 +172,11 @@ class RocrailProtocol:
         if not self.locomotives_loaded:
             debug_print("Processing locomotive data...")
             
-            # Debug: Check what we have in buffer
-            has_lclist_start = '<lclist>' in self.xml_buffer
-            has_lclist_end = '</lclist>' in self.xml_buffer
-            debug_print(f"Buffer analysis: has_start={has_lclist_start}, has_end={has_lclist_end}, buffer_size={len(self.xml_buffer)}")
-            
-            # Strategy 1: Try to parse complete lclist if we have both start and end
-            if has_lclist_start and has_lclist_end:
-                debug_print("Found complete lclist structure in buffer, trying to parse...")
+            # Check for complete locomotive list response - this is the main strategy
+            if '<lclist>' in self.xml_buffer and '</lclist>' in self.xml_buffer:
+                debug_print("Found complete lclist structure in buffer, attempting intelligent parsing...")
                 if self.loco_list.update_from_rocrail_response(self.xml_buffer):
-                    debug_print("Successfully parsed locomotive data from complete lclist!")
+                    debug_print("✅ Successfully parsed locomotive data from RocRail!")
                     # Call display update callback if provided
                     if self.display_update_callback:
                         debug_print("Calling display update callback...")
@@ -193,95 +188,37 @@ class RocrailProtocol:
                     self.locomotives_loaded = True  # Stop further locomotive queries
                     # Clear buffer after successful parsing to free memory
                     self.xml_buffer = ""
-                    debug_print("XML buffer cleared after successful locomotive parsing")
-                    return  # Exit early after successful parsing
+                    debug_print("✅ Locomotive loading completed successfully")
                 else:
-                    debug_print("Failed to parse locomotive data from complete lclist")
+                    debug_print("❌ Failed to parse locomotive data from complete lclist")
             
-            # Strategy 2: Streaming extraction if we have locomotive data but incomplete structure
-            elif has_lclist_start or ('lc ' in self.xml_buffer and 'id=' in self.xml_buffer):
-                debug_print("Attempting streaming locomotive extraction from buffer...")
-                locomotives_found = self.loco_list.extract_locomotives_streaming(self.xml_buffer)
-                
-                if locomotives_found:
-                    debug_print(f"Streaming extraction found {len(locomotives_found)} locomotives")
-                    # Add found locomotives to the list
-                    added = 0
-                    for loco_id in locomotives_found:
-                        if self.loco_list.add_locomotive(loco_id):
-                            added += 1
-                            debug_print(f"Added locomotive via streaming: {loco_id}")
-                    
-                    if added > 0:
-                        self.loco_list.save_to_file()
-                        debug_print(f"Streaming: Successfully added {added} locomotives")
-                        # Call display update callback
-                        if self.display_update_callback:
-                            debug_print("Calling display update callback after streaming parse...")
-                            self.display_update_callback()
-                        
-                        # If we got locomotives via streaming, consider the job done
-                        self.locomotive_query_pending = False
-                        self.locomotive_query_start_time = 0
-                        self.locomotives_loaded = True
-                        self.xml_buffer = ""  # Clear buffer
-                        debug_print("Locomotive loading completed via streaming extraction")
-                        return
-                else:
-                    debug_print("Streaming extraction found no locomotives")
-            
-            # Strategy 3: Wait for more data
-            if has_lclist_start and not has_lclist_end:
-                debug_print("Found start of lclist but no end tag yet - waiting for more data")
-            elif not has_lclist_start and has_lclist_end:
-                debug_print("WARNING: Found end of lclist but no start tag - buffer may have been truncated incorrectly!")
-            elif self.locomotive_query_pending and 'lc ' in self.xml_buffer:
-                debug_print("Found locomotive data fragments - attempting streaming extraction next")
+            # Check for partial locomotive data - wait for more
+            elif '<lclist>' in self.xml_buffer and '</lclist>' not in self.xml_buffer:
+                debug_print("📄 Found start of lclist but no end tag yet - waiting for more data")
+            elif '<lclist>' not in self.xml_buffer and '</lclist>' in self.xml_buffer:
+                debug_print("⚠️  Found end of lclist but no start tag - buffer was truncated, data may be lost")
             else:
-                debug_print("No locomotive data patterns found in buffer yet")
+                debug_print("🔍 No complete locomotive data found in buffer yet")
         else:
-            debug_print("Locomotives already loaded, ignoring received data")
+            debug_print("✅ Locomotives already loaded, ignoring received data")
         
         # Prevent buffer from growing too large - but preserve lclist boundaries
-        if len(self.xml_buffer) > 20480:  # 20KB limit (increased further)
-            # If we're waiting for locomotive data, try to preserve important data
+        if len(self.xml_buffer) > 24576:  # 24KB limit for large locomotive lists
+            # If we're waiting for locomotive data, try to preserve the lclist structure
             if not self.locomotives_loaded and self.locomotive_query_pending:
-                # Strategy 1: Try streaming extraction before truncating
-                debug_print("Buffer getting large - attempting streaming extraction before truncation...")
-                locomotives_found = self.loco_list.extract_locomotives_streaming(self.xml_buffer)
-                
-                if locomotives_found:
-                    debug_print(f"Emergency streaming found {len(locomotives_found)} locomotives")
-                    added = 0
-                    for loco_id in locomotives_found:
-                        if self.loco_list.add_locomotive(loco_id):
-                            added += 1
-                    
-                    if added > 0:
-                        self.loco_list.save_to_file()
-                        debug_print(f"Emergency streaming: Successfully saved {added} locomotives")
-                        if self.display_update_callback:
-                            self.display_update_callback()
-                        self.locomotive_query_pending = False
-                        self.locomotive_query_start_time = 0
-                        self.locomotives_loaded = True
-                        self.xml_buffer = ""  # Clear all
-                        debug_print("Locomotive loading completed via emergency streaming")
-                        return
-                
-                # Strategy 2: Preserve lclist structure if possible
+                # Find the start of lclist
                 lclist_start = self.xml_buffer.find('<lclist>')
                 if lclist_start != -1:
-                    # Keep from lclist start onwards, but limit to 8KB
+                    # Keep from lclist start onwards, but limit to reasonable size
                     preserved_data = self.xml_buffer[lclist_start:]
-                    if len(preserved_data) > 8192:
-                        preserved_data = preserved_data[:8192]
+                    if len(preserved_data) > 16384:  # Keep max 16KB of lclist data
+                        preserved_data = preserved_data[:16384]
                     self.xml_buffer = preserved_data
-                    debug_print("XML buffer truncated but preserved lclist start (8KB)")
+                    debug_print(f"XML buffer truncated but preserved lclist start ({len(preserved_data)} bytes)")
                 else:
-                    # Keep last 4KB as fallback
-                    self.xml_buffer = self.xml_buffer[-4096:]
-                    debug_print("XML buffer truncated - kept last 4KB for safety")
+                    # No lclist start found - keep last 8KB as safety net
+                    self.xml_buffer = self.xml_buffer[-8192:]
+                    debug_print("XML buffer truncated - kept last 8KB for safety")
             else:
                 # Standard truncation for non-locomotive data
                 self.xml_buffer = self.xml_buffer[-4096:]
