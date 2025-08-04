@@ -3,7 +3,8 @@ import time
 import machine
 from machine import Pin
 
-from rocrail_config import *
+from config import *
+from hardware_config import *
 from lib.interval_timer import IntervalTimer
 from lib.poti_controller import PotiController
 from lib.button_controller import ButtonController
@@ -11,9 +12,6 @@ from lib.neopixel_controller import NeoPixelController
 from lib.loco_list import LocoList
 from lib.protocol.rocrail_protocol import RocrailProtocol
 from lib.core.controller_state import ControllerStateMachine
-
-from btn_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL, BTN_GELB, BTN_BLAU, BTN_MITTE_UP, BTN_MITTE_DOWN
-from btn_config import ADC_GESCHWINDIGKEIT
 
 # WiFi interface
 wlan = None

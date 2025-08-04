@@ -6,13 +6,11 @@ import gc
 import json
 from neopixel import NeoPixel
 from machine import Pin, ADC
-from btn_config import ADC_GESCHWINDIGKEIT
+from hardware_config import ADC_GESCHWINDIGKEIT, NEOPIXEL_PIN, NEOPIXEL_COUNT
 
 # Configuration
 AP_SSID = "ESP_Config"
 AP_PASSWORD = "config123"
-NEOPIXEL_PIN = 5
-NEOPIXEL_COUNT = 6
 
 class NeoPixelStatus:
     def __init__(self, pin=NEOPIXEL_PIN, count=NEOPIXEL_COUNT):

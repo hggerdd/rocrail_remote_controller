@@ -1,14 +1,22 @@
 # ESP32 Locomotive Controller - Task List
 
 ## Project Status
-- **Current Version**: 1.1 (Modular Architecture)
+- **Current Version**: 1.2 (Unified Hardware Configuration)
 - **Last Updated**: 2025-08-04
 - **Total Tasks**: 29
-- **Completed**: 1
+- **Completed**: 2
 - **In Progress**: 0
-- **Pending**: 28
+- **Pending**: 27
 
 ## 🎯 Recent Achievements
+- **✅ Task 4.1 Completed (2025-08-04)**: Unified Hardware Configuration
+  - Merged `btn_config.py` and `rocrail_config.py` into unified system
+  - Created `hardware_config.py` for hardware pin definitions and LED mappings  
+  - Created `config.py` for application settings (WiFi, RocRail, timing)
+  - Fixed WiFi-Config-Server NeoPixel conflict (6→10 LEDs)
+  - Fixed boot.py bug (green_button check corrected)
+  - Successfully migrated all imports across the project
+
 - **✅ Task 1.1 Completed (2025-08-04)**: Major architectural refactoring
   - Reduced main controller from 26KB to 11KB (~60% size reduction)
   - Eliminated 13 global variables through class encapsulation
@@ -75,11 +83,16 @@
   - [ ] Hardware-Profile für verschiedene Board-Versionen
   - **Status**: Pending
   - **Estimated Effort**: 1 Stunde
-
-- [ ] **4.2** Hardware-Validierung beim Start
-  - [ ] Pin-Verfügbarkeit prüfen
-  - [ ] NeoPixel-Funktionalität testen
-  - [ ] ADC-Kalibrierung beim Start
+- [x] **4.1** ✅ Einheitliche Hardware-Konfiguration
+  - [x] `btn_config.py` und `rocrail_config.py` zusammengeführt
+  - [x] Neue `hardware_config.py` für Pin-Definitionen und LED-Zuordnungen
+  - [x] Neue `config.py` für Anwendungseinstellungen (WiFi, RocRail, Timing)
+  - [x] WiFi-Config-Server NeoPixel-Konflikt behoben (6→10 LEDs)
+  - [x] Boot.py Bug behoben (green_button Check korrigiert)
+  - [x] Alle Imports erfolgreich migriert
+  - **Status**: ✅ Completed (2025-08-04)
+  - **Actual Effort**: 2 Stunden
+  - **Priority**: Medium
   - **Status**: Pending
   - **Estimated Effort**: 2 Stunden
 
@@ -243,8 +256,8 @@ lib/
 ### Technical Debt
 - ~~Große `rocrail_controller.py` Datei macht Wartung schwierig~~ ✅ **BEHOBEN** (Task 1.1)
 - ~~Globale Variablen erschweren Testing und Debugging~~ ✅ **BEHOBEN** (Task 1.1) 
+- ~~Hardware-Konfiguration verteilt auf 2 Dateien mit Konflikten~~ ✅ **BEHOBEN** (Task 4.1)
 - Manueller XML-String-Bau ist fehleranfällig (→ Task 5.1: XML-Builder)
-- Fehlende Abstraktion zwischen Hardware und Business Logic (→ Tasks 4.1, 4.2)
 - Socket-Verbindung könnte stabiler sein (→ Tasks 2.1, 2.2)
 - Keine strukturierte Error-Recovery (→ Task 7.1)
 

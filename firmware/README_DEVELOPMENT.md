@@ -15,8 +15,8 @@ MicroPython ESP32 locomotive controller for Rocrail model railway systems. Batte
 - `lib/protocol/rocrail_protocol.py` - RocRail TCP/XML protocol communication
 - `lib/core/controller_state.py` - System state management and safety logic
 - `lib/neopixel_controller.py` - 10 LED status visualization controller
-- `rocrail_config.py` - Configuration constants including LED assignments
-- `btn_config.py` - Hardware pin definitions
+- `config.py` - Application configuration (WiFi, RocRail, timing intervals)
+- `hardware_config.py` - Hardware pin definitions and LED assignments
 
 ### Important Libraries (`lib/`)
 - `loco_list.py` - Locomotive management (selection, XML parsing)
@@ -40,7 +40,7 @@ MicroPython ESP32 locomotive controller for Rocrail model railway systems. Batte
 
 ### LED Status Logic
 ```python
-# LED assignments from rocrail_config.py
+# LED assignments from hardware_config.py
 LED_WIFI = 0          # WiFi status
 LED_ROCRAIL = 1       # RocRail connection ("RR")
 LED_DIR_LEFT = 2      # Direction "<" (true)
@@ -57,13 +57,13 @@ LED_LOCO_START = 5    # First locomotive (LEDs 5-9)
 
 ### Button Configuration
 ```python
-# From btn_config.py
+# From hardware_config.py
 BTN_NOTHALT = 17          # Red emergency/config button
 BTN_RICHTUNGSWECHEL = 19  # Green direction toggle
 BTN_GELB = 22             # Yellow sound/horn
 BTN_BLAU = 23             # Blue light toggle
-BTN_MITTE_UP = 21         # Black up - next locomotive
-BTN_MITTE_DOWN = 18       # Black down - previous locomotive
+BTN_MITTE_UP = 18         # Black up - next locomotive
+BTN_MITTE_DOWN = 21       # Black down - previous locomotive
 ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 ```
 
@@ -102,11 +102,11 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - System orchestration using RocrailProtocol and ControllerStateMachine classes
 - Timing-based event processing with safety mechanisms
 
-### Configuration (`rocrail_config.py`)
-- WiFi credentials and RocRail server settings
-- Timing intervals and hardware pin assignments
-- LED assignments and locomotive limits
-- WiFi reconnection parameters and recovery settings
+### Configuration (`config.py` + `hardware_config.py`)
+- WiFi credentials and RocRail server settings (`config.py`)
+- Timing intervals and locomotive management settings (`config.py`)
+- Hardware pin assignments and LED mappings (`hardware_config.py`)
+- WiFi reconnection parameters and recovery settings (`config.py`)
 
 ## Development Commands
 
@@ -127,8 +127,8 @@ Update `README_DEVELOPMENT.md` when:
 - Modifying file structure or critical dependencies
 
 ### Common Tasks
-**Adding LED Functions**: Update `neopixel_controller.py` methods and `rocrail_config.py` constants
-**Button Integration**: Add to `btn_config.py`, create `ButtonController` in main loop
+**Adding LED Functions**: Update `neopixel_controller.py` methods and `hardware_config.py` constants
+**Button Integration**: Add to `hardware_config.py`, create `ButtonController` in main loop
 **XML Commands**: Implement in send functions with error handling and status updates
 
 ## Current Status

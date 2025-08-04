@@ -1,7 +1,7 @@
 from machine import Pin
 from neopixel import NeoPixel
 import time
-from rocrail_config import LED_WIFI, LED_ROCRAIL, LED_DIR_LEFT, LED_DIR_RIGHT, LED_ACTIVITY, LED_LOCO_START, LED_LOCO_END
+from hardware_config import LED_WIFI, LED_ROCRAIL, LED_DIR_LEFT, LED_DIR_RIGHT, LED_ACTIVITY, LED_LOCO_START, LED_LOCO_END
 
 class NeoPixelController:
     """Controller for 10 NeoPixel LEDs with status visualization"""

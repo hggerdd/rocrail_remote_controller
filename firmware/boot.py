@@ -25,7 +25,7 @@
 from machine import Pin
 import sys
 import time
-from btn_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL
+from hardware_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL
 
 # Configure your button pin (adjust pin number for your board)
 red_button   = Pin(BTN_NOTHALT, Pin.IN, Pin.PULL_UP)
@@ -48,7 +48,7 @@ if not red_button.value():
     except Exception as e:
         print(f"Error running config server: {e}")
         
-elif not red_button.value():
+elif not green_button.value():  # FIXED: war vorher red_button (Bug!)
     print("\n\nGreen Button pressed - Test program started")
 else:
     print("\n\nNormal startup - Running main program...")
@@ -59,4 +59,5 @@ else:
     
     except Exception as e:
         print(f"Error running main rocrail_controller.py: {e}")
+
 
