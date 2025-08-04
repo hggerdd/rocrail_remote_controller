@@ -275,6 +275,22 @@ if run:
                             print(f"[LOCO_DEBUG] Timeout after {LOCO_QUERY_TIMEOUT}ms, resetting query state")
                             rocrail_protocol.reset_query_state()
                     
+                    # Memory monitoring every 30 seconds
+                    if timer.is_ready("memory_check", 30000):
+                        try:
+                            import gc
+                            gc.collect()
+                            free_mem = gc.mem_free()
+                            allocated_mem = gc.mem_alloc()
+                            print(f"[MEMORY] Free: {free_mem}B, Allocated: {allocated_mem}B")
+                            if free_mem < 15000:  # Critical memory warning
+                                print(f"[MEMORY] ⚠️  CRITICAL: Only {free_mem} bytes free!")
+                                # Force aggressive garbage collection
+                                gc.collect()
+                                gc.collect()  # Double collection
+                        except Exception as e:
+                            print(f"[MEMORY] Error checking memory: {e}")
+                    
                     if timer.is_ready("check_wifi_update", WIFI_CHECK_INTERVAL):
                         print("check wifi connection")
                         try:
@@ -367,6 +383,19 @@ if run:
                             state_machine.check_speed_enable_condition(speed)
                             if state_machine.is_speed_sending_enabled():
                                 print("Speed sending re-enabled - poti zero request cleared (purple LED off)")                       
+                    
+                    # Periodic cleanup after locomotives are loaded (every 5 minutes)
+                    if rocrail_protocol.are_locomotives_loaded() and timer.is_ready("periodic_cleanup", 300000):
+                        try:
+                            import gc
+                            print("[CLEANUP] Performing periodic memory cleanup...")
+                            # Force garbage collection
+                            gc.collect()
+                            gc.collect()  # Double collection for better results
+                            free_mem = gc.mem_free()
+                            print(f"[CLEANUP] Memory after cleanup: {free_mem} bytes free")
+                        except Exception as e:
+                            print(f"[CLEANUP] Error during cleanup: {e}")
                     
                     # Small delay to prevent CPU hogging
                     time.sleep(0.05)

@@ -70,18 +70,38 @@ class RocrailProtocol:
         """Background thread for listening to socket data"""
         print("Socket listener started")
         
+        receive_buffer_size = 2048  # Smaller buffer to prevent memory issues
+        consecutive_errors = 0
+        
         while self.running:
             try:
-                data = self.socket_client.recv(4096)
+                data = self.socket_client.recv(receive_buffer_size)
                 if data:
+                    consecutive_errors = 0  # Reset error counter on successful receive
                     if self.data_callback:
                         self.data_callback(data)
                 else:
                     print("Connection closed by server")
                     self.rocrail_status = "lost"
                     break
-            except:
-                # Any socket error - continue with small delay
+            except OSError as e:
+                # Network-related errors
+                consecutive_errors += 1
+                if consecutive_errors > 10:
+                    print(f"Socket listener: Too many consecutive errors ({consecutive_errors}), stopping")
+                    self.rocrail_status = "lost"
+                    break
+                time.sleep(0.01)
+                continue
+            except Exception as e:
+                # Other errors - log and continue
+                consecutive_errors += 1
+                if consecutive_errors <= 3:  # Only log first few errors to avoid spam
+                    print(f"Socket listener error: {e}")
+                if consecutive_errors > 20:
+                    print(f"Socket listener: Critical error count ({consecutive_errors}), stopping")
+                    self.rocrail_status = "lost"
+                    break
                 time.sleep(0.01)
                 continue
         
@@ -159,70 +179,104 @@ class RocrailProtocol:
         except:
             data_str = str(data)  # Fallback if decode fails
         
-        # Debug: Print received data
-        debug_print(f"Received data ({len(data_str)} chars): {data_str[:200]}...")
+        # Safety check: Reject abnormally large data packets to prevent memory issues
+        if len(data_str) > 8192:  # More than 8KB in single packet is suspicious
+            print(f"[MEMORY] WARNING: Rejecting large data packet ({len(data_str)} bytes) to prevent memory issues")
+            return
         
-        # Accumulate XML data in buffer
+        # Debug: Print received data (only if still loading)
+        if not self.locomotives_loaded:
+            debug_print(f"Received data ({len(data_str)} chars): {data_str[:200]}...")
+        
+        # Memory management: If locomotives are already loaded, we don't need to buffer status updates
+        if self.locomotives_loaded:
+            # Just process for connection monitoring, don't accumulate in buffer
+            # Status updates like <lc id="BR103" V="68" dir="true"...> are not needed
+            if len(self.xml_buffer) > 1024:  # Keep small buffer for connection monitoring
+                self.xml_buffer = ""
+            return
+        
+        # Accumulate XML data in buffer ONLY if still loading locomotives
         self.xml_buffer += data_str
         
         # Debug: Print current buffer state
         debug_print(f"XML buffer size: {len(self.xml_buffer)}, locomotives_loaded: {self.locomotives_loaded}")
         
-        # Only process locomotive data if we haven't loaded locomotives yet
-        if not self.locomotives_loaded:
-            debug_print("Processing locomotive data...")
-            
-            # Check for complete locomotive list response - this is the main strategy
-            if '<lclist>' in self.xml_buffer and '</lclist>' in self.xml_buffer:
-                debug_print("Found complete lclist structure in buffer, attempting intelligent parsing...")
-                if self.loco_list.update_from_rocrail_response(self.xml_buffer):
-                    debug_print("✅ Successfully parsed locomotive data from RocRail!")
-                    # Call display update callback if provided
-                    if self.display_update_callback:
-                        debug_print("Calling display update callback...")
-                        self.display_update_callback()
-                    else:
-                        debug_print("WARNING: No display update callback set!")
-                    self.locomotive_query_pending = False
-                    self.locomotive_query_start_time = 0
-                    self.locomotives_loaded = True  # Stop further locomotive queries
-                    # Clear buffer after successful parsing to free memory
-                    self.xml_buffer = ""
-                    debug_print("✅ Locomotive loading completed successfully")
-                else:
-                    debug_print("❌ Failed to parse locomotive data from complete lclist")
-            
-            # Check for partial locomotive data - wait for more
-            elif '<lclist>' in self.xml_buffer and '</lclist>' not in self.xml_buffer:
-                debug_print("📄 Found start of lclist but no end tag yet - waiting for more data")
-            elif '<lclist>' not in self.xml_buffer and '</lclist>' in self.xml_buffer:
-                debug_print("⚠️  Found end of lclist but no start tag - buffer was truncated, data may be lost")
-            else:
-                debug_print("🔍 No complete locomotive data found in buffer yet")
-        else:
-            debug_print("✅ Locomotives already loaded, ignoring received data")
+        # Check memory usage and log warnings
+        try:
+            import gc
+            gc.collect()
+            free_mem = gc.mem_free()
+            if free_mem < 20000:  # Less than 20KB free memory
+                debug_print(f"⚠️  LOW MEMORY WARNING: {free_mem} bytes free")
+        except:
+            pass
         
-        # Prevent buffer from growing too large - but preserve lclist boundaries
-        if len(self.xml_buffer) > 24576:  # 24KB limit for large locomotive lists
-            # If we're waiting for locomotive data, try to preserve the lclist structure
-            if not self.locomotives_loaded and self.locomotive_query_pending:
-                # Find the start of lclist
-                lclist_start = self.xml_buffer.find('<lclist>')
-                if lclist_start != -1:
-                    # Keep from lclist start onwards, but limit to reasonable size
-                    preserved_data = self.xml_buffer[lclist_start:]
-                    if len(preserved_data) > 16384:  # Keep max 16KB of lclist data
-                        preserved_data = preserved_data[:16384]
-                    self.xml_buffer = preserved_data
-                    debug_print(f"XML buffer truncated but preserved lclist start ({len(preserved_data)} bytes)")
+        # Process locomotive data if we haven't loaded locomotives yet
+        debug_print("Processing locomotive data...")
+        
+        # Check for complete locomotive list response - this is the main strategy
+        if '<lclist>' in self.xml_buffer and '</lclist>' in self.xml_buffer:
+            debug_print("Found complete lclist structure in buffer, attempting intelligent parsing...")
+            if self.loco_list.update_from_rocrail_response(self.xml_buffer):
+                debug_print("✅ Successfully parsed locomotive data from RocRail!")
+                # Call display update callback if provided
+                if self.display_update_callback:
+                    debug_print("Calling display update callback...")
+                    self.display_update_callback()
                 else:
-                    # No lclist start found - keep last 8KB as safety net
-                    self.xml_buffer = self.xml_buffer[-8192:]
-                    debug_print("XML buffer truncated - kept last 8KB for safety")
+                    debug_print("WARNING: No display update callback set!")
+                self.locomotive_query_pending = False
+                self.locomotive_query_start_time = 0
+                self.locomotives_loaded = True  # Stop further locomotive queries
+                # Clear buffer after successful parsing to free memory
+                self.xml_buffer = ""
+                debug_print("✅ Locomotive loading completed successfully - buffer cleared")
+                # Disable debug output to save memory
+                global DEBUG_LOCOMOTIVE_LOADING
+                DEBUG_LOCOMOTIVE_LOADING = False
+                print("[MEMORY] Locomotive loading complete - disabled debug output to save memory")
+                # Force garbage collection after locomotive loading
+                try:
+                    import gc
+                    gc.collect()
+                    print(f"[MEMORY] Memory after locomotive loading: {gc.mem_free()} bytes free")
+                except:
+                    pass
             else:
-                # Standard truncation for non-locomotive data
+                debug_print("❌ Failed to parse locomotive data from complete lclist")
+        
+        # Check for partial locomotive data - wait for more
+        elif '<lclist>' in self.xml_buffer and '</lclist>' not in self.xml_buffer:
+            debug_print("📄 Found start of lclist but no end tag yet - waiting for more data")
+        elif '<lclist>' not in self.xml_buffer and '</lclist>' in self.xml_buffer:
+            debug_print("⚠️  Found end of lclist but no start tag - buffer was truncated, data may be lost")
+        else:
+            debug_print("🔍 No complete locomotive data found in buffer yet")
+        
+        # Aggressive buffer management during locomotive loading
+        if len(self.xml_buffer) > 16384:  # 16KB limit (reduced from 24KB)
+            # Find the start of lclist and preserve it
+            lclist_start = self.xml_buffer.find('<lclist>')
+            if lclist_start != -1:
+                # Keep from lclist start onwards, but limit to 8KB
+                preserved_data = self.xml_buffer[lclist_start:]
+                if len(preserved_data) > 8192:
+                    preserved_data = preserved_data[:8192]
+                self.xml_buffer = preserved_data
+                debug_print(f"XML buffer truncated but preserved lclist start ({len(preserved_data)} bytes)")
+            else:
+                # No lclist start found - keep last 4KB as safety net
                 self.xml_buffer = self.xml_buffer[-4096:]
-                debug_print("XML buffer truncated to prevent memory issues")
+                debug_print("XML buffer truncated - kept last 4KB for safety")
+            
+            # Force garbage collection after buffer truncation
+            try:
+                import gc
+                gc.collect()
+                debug_print(f"Memory after buffer truncation: {gc.mem_free()} bytes free")
+            except:
+                pass
     
     def send_speed_and_direction(self, speed, direction):
         """Send locomotive speed and direction via RocRail RCP XML format"""
