@@ -272,6 +272,59 @@ class LocoList:
         finally:
             gc.collect()
     
+    def extract_locomotives_streaming(self, xml_fragment):
+        """Extract locomotives from XML fragment without waiting for complete structure
+        
+        Args:
+            xml_fragment: XML string fragment that may contain locomotive entries
+            
+        Returns:
+            List of locomotive IDs found in this fragment
+        """
+        try:
+            locomotives_found = []
+            
+            # Look for locomotive entries using string methods
+            text = xml_fragment
+            start_pos = 0
+            while True:
+                # Find <lc id=" pattern
+                lc_pos = text.find('<lc ', start_pos)
+                if lc_pos == -1:
+                    break
+                    
+                # Find id=" after the <lc
+                id_pos = text.find('id="', lc_pos)
+                if id_pos == -1:
+                    start_pos = lc_pos + 4
+                    continue
+                    
+                # Find the end quote
+                id_start = id_pos + 4
+                id_end = text.find('"', id_start)
+                if id_end == -1:
+                    start_pos = lc_pos + 4
+                    continue
+                
+                # Extract locomotive ID
+                loco_id = text[id_start:id_end].strip()
+                if (loco_id and 
+                    len(loco_id) > 0 and 
+                    not loco_id.startswith('xml') and
+                    not loco_id.startswith('query') and
+                    not loco_id.startswith('model') and
+                    loco_id != 'model'):  # Filter out system entries
+                    locomotives_found.append(loco_id)
+                    print(f"[LOCO_STREAM] Found locomotive: {loco_id}")
+                
+                start_pos = id_end
+            
+            return locomotives_found
+                
+        except Exception as e:
+            print(f"[LOCO_STREAM] Error in streaming extraction: {e}")
+            return []
+    
     def get_status_string(self):
         """Get status string for debugging
         
