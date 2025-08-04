@@ -1,32 +1,46 @@
 # ESP32 Locomotive Controller - Task List
 
 ## Project Status
-- **Current Version**: 1.0 (Funktionsfähiger Prototyp)
-- **Last Updated**: 2025-08-03
+- **Current Version**: 1.1 (Modular Architecture)
+- **Last Updated**: 2025-08-04
 - **Total Tasks**: 29
-- **Completed**: 0
+- **Completed**: 1
 - **In Progress**: 0
-- **Pending**: 29
+- **Pending**: 28
+
+## 🎯 Recent Achievements
+- **✅ Task 1.1 Completed (2025-08-04)**: Major architectural refactoring
+  - Reduced main controller from 26KB to 11KB (~60% size reduction)
+  - Eliminated 13 global variables through class encapsulation
+  - Implemented modular `lib/protocol/` and `lib/core/` structure
+  - Fixed locomotive loading regression and button functionality
+  - Added comprehensive debug logging with control flags
 
 ---
 
 ## KRITISCHE VERBESSERUNGEN (Dringlichkeit: HOCH)
 
 ### 1. Speicher-Management und Performance
-- [ ] **1.1** Aufteilen von `rocrail_controller.py` (23KB) in kleinere Module
-  - [ ] RocrailProtocol Klasse erstellen (`lib/protocol/rocrail_protocol.py`)
-  - [ ] ControllerStateMachine Klasse erstellen (`lib/core/controller_state.py`)
-  - [ ] Main Controller Klasse implementieren
-  - **Status**: Pending
-  - **Estimated Effort**: 4 Stunden
+- [x] **1.1** ✅ Aufteilen von `rocrail_controller.py` (26KB → 11KB) in kleinere Module
+  - [x] RocrailProtocol Klasse erstellen (`lib/protocol/rocrail_protocol.py`) - 148 Zeilen
+  - [x] ControllerStateMachine Klasse erstellen (`lib/core/controller_state.py`) - 78 Zeilen  
+  - [x] Main Controller refactored (~700 → ~320 Zeilen)
+  - [x] 13 globale Variablen eliminiert durch Klassen-Kapselung
+  - [x] Callback-Mechanismus für Display-Updates implementiert
+  - [x] Debug-Logging mit Kontrollflag hinzugefügt
+  - **Status**: ✅ Completed (2025-08-04)
+  - **Actual Effort**: 6 Stunden
   - **Priority**: Critical
+  - **Benefits**: Bessere Testbarkeit, klare Verantwortlichkeiten, modulare Wartung
 
 - [ ] **1.2** Globale Variablen durch Klassen-basierte Architektur ersetzen
-  - [ ] MainController Klasse mit Zustandsverwaltung
-  - [ ] Dependency Injection für Hardware-Komponenten
-  - **Status**: Pending
-  - **Dependencies**: Task 1.1
-  - **Estimated Effort**: 3 Stunden
+  - [x] ~~13 kritische globale Variablen eliminiert~~ (durch Task 1.1 erledigt)
+  - [ ] MainController Klasse mit Zustandsverwaltung (optional)
+  - [ ] Dependency Injection für Hardware-Komponenten (optional)
+  - **Status**: Partially Completed by Task 1.1
+  - **Dependencies**: ~~Task 1.1~~ ✅ Completed
+  - **Estimated Effort**: 1 Stunde (verringert)
+  - **Priority**: Low (reduziert durch Task 1.1)
 
 ### 2. Socket-Verbindung Stabilität
 - [ ] **2.1** Timeout-basierte Verbindungsüberwachung implementieren
@@ -105,19 +119,23 @@
 ## OPTIMIERUNGEN (Dringlichkeit: NIEDRIG)
 
 ### 8. Code-Qualität
-- [ ] **8.1** Lange Funktionen aufteilen
-  - [ ] `handle_data()` Funktion refactoren
-  - [ ] Main loop in State Pattern umwandeln
-  - [ ] Funktionen unter 50 Zeilen halten
-  - **Status**: Pending
-  - **Estimated Effort**: 3 Stunden
+- [x] **8.1** ✅ Lange Funktionen aufteilen (teilweise durch Task 1.1)
+  - [x] ~~`handle_data()` Funktion refactoren~~ → `RocrailProtocol.handle_data()`
+  - [x] ~~Socket-Management extrahieren~~ → `RocrailProtocol` Klasse
+  - [x] ~~State-Management extrahieren~~ → `ControllerStateMachine` Klasse
+  - [ ] Main loop in State Pattern umwandeln (optional)  
+  - [x] Funktionen unter 50 Zeilen halten (größtenteils erfüllt)
+  - **Status**: ✅ Mostly Completed (durch Task 1.1)
+  - **Actual Effort**: 2 Stunden (durch Task 1.1)
 
-- [ ] **8.2** Code-Dokumentation verbessern
-  - [ ] Docstrings für alle öffentlichen Methoden
+- [x] **8.2** ✅ Code-Dokumentation verbessern (teilweise durch Task 1.1)
+  - [x] ~~README_DEVELOPMENT.md aktualisieren~~ → Neue Architektur dokumentiert
+  - [x] Docstrings für neue Klassen (`RocrailProtocol`, `ControllerStateMachine`)
+  - [ ] Docstrings für alle verbleibenden öffentlichen Methoden
   - [ ] Inline-Kommentare für komplexe Logik
-  - [ ] README_DEVELOPMENT.md aktualisieren
-  - **Status**: Pending
-  - **Estimated Effort**: 2 Stunden
+  - **Status**: ✅ Partially Completed (durch Task 1.1)
+  - **Actual Effort**: 1 Stunde (durch Task 1.1)
+  - **Remaining Effort**: 1 Stunde
 
 ### 9. Logging und Debugging
 - [ ] **9.1** Logger-Klasse implementieren
@@ -152,26 +170,27 @@
 ## STRUKTURELLE VERBESSERUNGEN
 
 ### 11. Datei-Organisation
-- [ ] **11.1** Module-Struktur implementieren
+- [x] **11.1** ✅ Module-Struktur implementieren (teilweise durch Task 1.1)
 ```
 lib/
 ├── hardware/          # Hardware-abstraction
-│   ├── neopixel_controller.py
-│   ├── button_controller.py  
-│   └── poti_controller.py
-├── protocol/          # Communication protocols
-│   ├── rocrail_protocol.py
-│   └── xml_builder.py
-├── controllers/       # Business logic controllers
+│   ├── neopixel_controller.py ✅
+│   ├── button_controller.py ✅ 
+│   └── poti_controller.py ✅
+├── protocol/          # Communication protocols ✅ NEW
+│   ├── rocrail_protocol.py ✅ NEW
+│   └── xml_builder.py (geplant)
+├── controllers/       # Business logic controllers (geplant)
 │   ├── locomotive_controller.py
-│   └── wifi_controller.py
-└── core/             # Core system components
-    ├── status_manager.py
-    ├── logger.py
-    └── config_manager.py
+│   └── wifi_controller.py  
+└── core/             # Core system components ✅ NEW
+    ├── controller_state.py ✅ NEW (state management)
+    ├── logger.py (geplant)
+    └── config_manager.py (geplant)
 ```
-- **Status**: Pending
-- **Estimated Effort**: 3 Stunden
+- **Status**: ✅ Partially Completed (durch Task 1.1)
+- **Actual Effort**: 2 Stunden (durch Task 1.1)
+- **Remaining**: XML-Builder, WiFi-Controller, Logger, Config-Manager
 
 ### 12. Konfiguration optimieren
 - [ ] **12.1** Konfigurationssystem überarbeiten
@@ -200,6 +219,17 @@ lib/
 - [x] WiFi-Konfiguration über Web-Interface
 - [x] Button-Controller mit Entprellung
 
+### ✅ Speicher-Management und Performance (2025-08-04)
+- [x] **Task 1.1**: Modular Architecture Implementation
+  - [x] `rocrail_controller.py` von 26KB auf 11KB reduziert (~700 → ~320 Zeilen)
+  - [x] `RocrailProtocol` Klasse (`lib/protocol/rocrail_protocol.py`) - TCP/XML-Kommunikation
+  - [x] `ControllerStateMachine` Klasse (`lib/core/controller_state.py`) - Zustandsverwaltung  
+  - [x] 13 globale Variablen durch Klassen-Kapselung eliminiert
+  - [x] Callback-Mechanismus für UI-Updates implementiert
+  - [x] Locomotive Loading von RocRail-Server wiederhergestellt
+  - [x] Debug-Logging mit Kontrollflag für bessere Wartbarkeit
+  - [x] README_DEVELOPMENT.md aktualisiert mit neuer Architektur
+
 ---
 
 ## NOTES & DECISIONS
@@ -211,10 +241,12 @@ lib/
 - **Real-time Requirements**: Steuerungsbefehle müssen schnell übertragen werden
 
 ### Technical Debt
-- Große `rocrail_controller.py` Datei macht Wartung schwierig
-- Globale Variablen erschweren Testing und Debugging
-- Manueller XML-String-Bau ist fehleranfällig
-- Fehlende Abstraktion zwischen Hardware und Business Logic
+- ~~Große `rocrail_controller.py` Datei macht Wartung schwierig~~ ✅ **BEHOBEN** (Task 1.1)
+- ~~Globale Variablen erschweren Testing und Debugging~~ ✅ **BEHOBEN** (Task 1.1) 
+- Manueller XML-String-Bau ist fehleranfällig (→ Task 5.1: XML-Builder)
+- Fehlende Abstraktion zwischen Hardware und Business Logic (→ Tasks 4.1, 4.2)
+- Socket-Verbindung könnte stabiler sein (→ Tasks 2.1, 2.2)
+- Keine strukturierte Error-Recovery (→ Task 7.1)
 
 ### Future Considerations
 - OTA-Updates für Firmware
