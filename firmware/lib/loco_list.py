@@ -170,12 +170,32 @@ class LocoList:
             True if locomotives were updated, False otherwise
         """
         try:
-            # Simple string-based parsing (no regex needed)
+            # Debug: Print what we're trying to parse
+            print(f"[LOCO_PARSE] Attempting to parse {len(xml_response)} chars")
+            print(f"[LOCO_PARSE] Buffer starts with: {xml_response[:100]}...")
+            print(f"[LOCO_PARSE] Buffer ends with: ...{xml_response[-100:]}")
+            
+            # Check if we have a complete lclist structure
+            if '<lclist>' not in xml_response or '</lclist>' not in xml_response:
+                print("[LOCO_PARSE] Incomplete lclist structure - waiting for more data")
+                return False
+            
+            # Extract the complete lclist section
+            start_idx = xml_response.find('<lclist>')
+            end_idx = xml_response.find('</lclist>') + len('</lclist>')
+            
+            if start_idx == -1 or end_idx == -1:
+                print("[LOCO_PARSE] Could not find complete lclist boundaries")
+                return False
+            
+            lclist_section = xml_response[start_idx:end_idx]
+            print(f"[LOCO_PARSE] Extracted lclist section: {len(lclist_section)} chars")
+            
+            # Simple string-based parsing for locomotive entries
             locomotives_found = []
             
             # Look for locomotive entries using string methods
-            # Pattern: <lc id="..." - most common
-            text = xml_response
+            text = lclist_section
             start_pos = 0
             while True:
                 # Find <lc id=" pattern
@@ -200,8 +220,11 @@ class LocoList:
                 loco_id = text[id_start:id_end].strip()
                 if loco_id:
                     locomotives_found.append(loco_id)
+                    print(f"[LOCO_PARSE] Found locomotive: {loco_id}")
                 
                 start_pos = id_end
+            
+            print(f"[LOCO_PARSE] Total locomotives found: {len(locomotives_found)}")
             
             # Filter out duplicates and invalid entries
             unique_locomotives = []
@@ -215,10 +238,12 @@ class LocoList:
                     loco_id != 'model'):  # Filter out system entries
                     unique_locomotives.append(loco_id)
             
+            print(f"[LOCO_PARSE] Unique locomotives: {unique_locomotives}")
+            
             if unique_locomotives:
-                # Clear existing list only if we found substantial new data
-                if len(unique_locomotives) > len(self.locomotives):
-                    self.clear()
+                # Clear existing list and add new locomotives
+                old_count = len(self.locomotives)
+                self.clear()
                 
                 # Add locomotives (up to max limit)
                 added = 0
@@ -231,15 +256,18 @@ class LocoList:
                 # Save updated list if we added any
                 if added > 0:
                     self.save_to_file()
-                    print(f"Locomotives found: {', '.join(unique_locomotives)} - Saved to file")
+                    print(f"[LOCO_PARSE] Successfully updated locomotive list: {old_count} -> {added} locos")
+                    print(f"[LOCO_PARSE] Locomotives: {', '.join([loco['id'] for loco in self.locomotives])}")
                     return True
                 else:
+                    print("[LOCO_PARSE] No locomotives were added")
                     return False
             else:
+                print("[LOCO_PARSE] No valid locomotives found")
                 return False
                 
         except Exception as e:
-            print(f"Error parsing locomotives: {e}")
+            print(f"[LOCO_PARSE] Error parsing locomotives: {e}")
             return False
         finally:
             gc.collect()

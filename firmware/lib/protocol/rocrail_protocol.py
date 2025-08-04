@@ -172,9 +172,9 @@ class RocrailProtocol:
         if not self.locomotives_loaded:
             debug_print("Processing locomotive data...")
             
-            # Check for locomotive list response
-            if 'lclist' in self.xml_buffer.lower() or '<lc ' in self.xml_buffer:
-                debug_print("Found lclist or <lc> in buffer, trying to parse...")
+            # Check for complete locomotive list response
+            if '<lclist>' in self.xml_buffer and '</lclist>' in self.xml_buffer:
+                debug_print("Found complete lclist structure in buffer, trying to parse...")
                 if self.loco_list.update_from_rocrail_response(self.xml_buffer):
                     debug_print("Successfully parsed locomotive data from RocRail!")
                     # Call display update callback if provided
@@ -186,25 +186,17 @@ class RocrailProtocol:
                     self.locomotive_query_pending = False
                     self.locomotive_query_start_time = 0
                     self.locomotives_loaded = True  # Stop further locomotive queries
+                    # Clear buffer after successful parsing to free memory
+                    self.xml_buffer = ""
+                    debug_print("XML buffer cleared after successful locomotive parsing")
                 else:
-                    debug_print("Failed to parse locomotive data from buffer")
+                    debug_print("Failed to parse locomotive data from complete lclist")
             
-            # Check for complete model response
-            elif self.locomotive_query_pending and ('</model>' in self.xml_buffer or '</xmlh>' in self.xml_buffer):
-                debug_print("Found complete model response, trying to parse...")
-                if self.loco_list.update_from_rocrail_response(self.xml_buffer):
-                    debug_print("Successfully parsed locomotive data from model response!")
-                    # Call display update callback if provided
-                    if self.display_update_callback:
-                        debug_print("Calling display update callback...")
-                        self.display_update_callback()
-                    else:
-                        debug_print("WARNING: No display update callback set!")
-                    self.locomotives_loaded = True  # Stop further locomotive queries
-                else:
-                    debug_print("Failed to parse locomotive data from model response")
-                self.locomotive_query_pending = False
-                self.locomotive_query_start_time = 0
+            # Check for partial locomotive data (but don't try to parse incomplete data)
+            elif '<lclist>' in self.xml_buffer:
+                debug_print("Found start of lclist but no end tag yet - waiting for more data")
+            elif self.locomotive_query_pending and 'lc ' in self.xml_buffer:
+                debug_print("Found locomotive data fragments - waiting for complete lclist structure")
             else:
                 debug_print("No locomotive data patterns found in buffer yet")
         else:
