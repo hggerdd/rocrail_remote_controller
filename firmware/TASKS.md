@@ -78,11 +78,6 @@
 ## WICHTIGE VERBESSERUNGEN (Dringlichkeit: MITTEL)
 
 ### 4. Hardware-Abstraktion
-- [ ] **4.1** Einheitliche Hardware-Konfiguration
-  - [ ] Pin-Definitionen aus `btn_config.py` und `rocrail_config.py` zusammenführen
-  - [ ] Hardware-Profile für verschiedene Board-Versionen
-  - **Status**: Pending
-  - **Estimated Effort**: 1 Stunde
 - [x] **4.1** ✅ Einheitliche Hardware-Konfiguration
   - [x] `btn_config.py` und `rocrail_config.py` zusammengeführt
   - [x] Neue `hardware_config.py` für Pin-Definitionen und LED-Zuordnungen
