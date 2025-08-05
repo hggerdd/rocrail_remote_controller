@@ -1,8 +1,18 @@
 import socket
 import time
 import _thread
-from config import (RECONNECT_DELAY_FAST, RECONNECT_DELAY_SLOW, 
-                   RECONNECT_FAST_ATTEMPTS, RECONNECT_UNLIMITED, SOCKET_TIMEOUT)
+
+# Robust config import with fallbacks
+try:
+    from config import (RECONNECT_DELAY_FAST, RECONNECT_DELAY_SLOW, 
+                       RECONNECT_FAST_ATTEMPTS, RECONNECT_UNLIMITED, SOCKET_TIMEOUT)
+except ImportError as e:
+    print(f"Config import error: {e}, using fallback values")
+    RECONNECT_DELAY_FAST = 3000
+    RECONNECT_DELAY_SLOW = 8000  
+    RECONNECT_FAST_ATTEMPTS = 3
+    RECONNECT_UNLIMITED = True
+    SOCKET_TIMEOUT = 10
 
 # Debug control - set to False to disable debug output
 DEBUG_LOCOMOTIVE_LOADING = True
@@ -39,6 +49,8 @@ class RocrailProtocol:
         self.host = None
         self.port = None
         self._socket_lock = False  # Simple lock for MicroPython
+        self.connection_established_time = 0  # Track when connection was first established
+        self.reconnect_enabled = False  # Only enable after stable connection
         
         # XML data handling
         self.xml_buffer = ""
@@ -121,6 +133,11 @@ class RocrailProtocol:
     
     def _start_reconnect_thread(self):
         """Start automatic reconnection thread"""
+        # Don't start reconnect during initial connection phase
+        if not self.reconnect_enabled:
+            print("Reconnect not enabled yet - skipping auto-reconnect")
+            return
+            
         # Prevent multiple reconnect threads
         if self.reconnect_running:
             print("Reconnect thread already running - skipping")
@@ -213,9 +230,9 @@ class RocrailProtocol:
                 print("Could not acquire lock for connection attempt")
                 return False
                 
-            # Create new socket with timeout
+            # Create new socket WITHOUT timeout for normal operation
             self.socket_client = socket.socket()
-            self.socket_client.settimeout(SOCKET_TIMEOUT)
+            # Do NOT set timeout: self.socket_client.settimeout(SOCKET_TIMEOUT)
             
             # Connect to server
             print(f"Attempting connection to {self.host}:{self.port}...")
@@ -246,13 +263,6 @@ class RocrailProtocol:
                     pass
                 self.socket_client = None
                 
-            # Force garbage collection on failed connection
-            try:
-                import gc
-                gc.collect()
-            except:
-                pass
-                
             return False
         finally:
             self._release_socket_lock()
@@ -281,28 +291,28 @@ class RocrailProtocol:
             except OSError as e:
                 # Network-related errors
                 consecutive_errors += 1
-                if consecutive_errors > 20:  # Increased threshold
+                if consecutive_errors > 10:  # Back to original threshold
                     print(f"Socket listener: Too many consecutive errors ({consecutive_errors}), starting reconnect")
                     self.rocrail_status = "lost"
                     # Only start reconnect if not already running
                     if not self.reconnect_running:
                         self._start_reconnect_thread()
                     break
-                time.sleep(0.05)  # Longer pause between error retries
+                time.sleep(0.01)  # Back to original timing
                 continue
             except Exception as e:
                 # Other errors - log and continue
                 consecutive_errors += 1
                 if consecutive_errors <= 3:  # Only log first few errors to avoid spam
                     print(f"Socket listener error: {e}")
-                if consecutive_errors > 30:  # Increased threshold
+                if consecutive_errors > 20:  # Back to original threshold
                     print(f"Socket listener: Critical error count ({consecutive_errors}), starting reconnect")
                     self.rocrail_status = "lost"
                     # Only start reconnect if not already running
                     if not self.reconnect_running:
                         self._start_reconnect_thread()
                     break
-                time.sleep(0.05)  # Longer pause between error retries
+                time.sleep(0.01)  # Back to original timing
                 continue
         
         print("Socket listener stopped")
@@ -325,13 +335,36 @@ class RocrailProtocol:
         # Set connecting status
         self.rocrail_status = "connecting"
         
-        # Use new connection method
-        if self._attempt_connection():
+        try:
+            # Create socket (simple MicroPython way - like original)
+            self.socket_client = socket.socket()
+            print(f"Connecting to {host}:{port}...")
+            self.socket_client.connect((host, port))
+            
+            # Connection successful
+            self.rocrail_status = "connected"
+            self.last_rocrail_activity_time = time.ticks_ms()
+            self.last_rocrail_send_success = True
+            self.running = True
+            self.connection_established_time = time.ticks_ms()
+            
+            # Start listener thread
+            _thread.start_new_thread(self.socket_listener, ())
+            
             print(f"Connected to server {host}:{port}")
             return True
-        else:
-            print(f"Initial connection failed, starting reconnect thread...")
-            self._start_reconnect_thread()  # Start auto-reconnect immediately
+            
+        except Exception as e:
+            print(f"Connection error: {e}")
+            self.rocrail_status = "lost"
+            if self.socket_client:
+                try:
+                    self.socket_client.close()
+                except:
+                    pass
+                self.socket_client = None
+            # NO auto-reconnect on initial connection failure
+            print("Initial connection failed - no auto-reconnect during startup")
             return False
     
     def stop_connection(self):
@@ -421,6 +454,11 @@ class RocrailProtocol:
                 self.locomotive_query_pending = False
                 self.locomotive_query_start_time = 0
                 self.locomotives_loaded = True  # Stop further locomotive queries
+                
+                # Enable reconnect after successful locomotive loading
+                self.reconnect_enabled = True
+                print("System stable - reconnect logic enabled")
+                
                 # Clear buffer after successful parsing to free memory
                 self.xml_buffer = ""
                 debug_print("✅ Locomotive loading completed successfully - buffer cleared")
@@ -476,11 +514,8 @@ class RocrailProtocol:
         if not current_loco_id:
             return False
         
-        if not self._acquire_socket_lock():
-            return False
-            
-        try:
-            if self.socket_client:
+        if self.socket_client:
+            try:
                 # Format the message according to RocRail protocol
                 message = f'<lc id="{current_loco_id}" V="{speed}" dir="{direction}"/>'
                 message_len = len(message)
@@ -494,17 +529,14 @@ class RocrailProtocol:
                     self.rocrail_status = "connected"
                 
                 return True
-        except Exception as e:
-            print(f"Send error: {e}")
-            self.last_rocrail_send_success = False
-            self.rocrail_status = "lost"
-            # Only start reconnect if not already running
-            if not self.reconnect_running:
-                self._start_reconnect_thread()
-            return False
-        finally:
-            self._release_socket_lock()
-        
+            except Exception as e:
+                print(f"Send error: {e}")
+                self.last_rocrail_send_success = False
+                self.rocrail_status = "lost"
+                # Only start reconnect if not already running
+                if not self.reconnect_running:
+                    self._start_reconnect_thread()
+                return False
         return False
     
     def send_light_command(self, light_on_off):
@@ -513,11 +545,8 @@ class RocrailProtocol:
         if not current_loco_id:
             return False
         
-        if not self._acquire_socket_lock():
-            return False
-            
-        try:
-            if self.socket_client:
+        if self.socket_client:
+            try:
                 message = f'<fn id="{current_loco_id}" fn0="{light_on_off}"/>'
                 message_len = len(message)
                 message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
@@ -530,29 +559,22 @@ class RocrailProtocol:
                     self.rocrail_status = "connected"
                 
                 return True
-        except Exception as e:
-            print(f"Send error: {e}")
-            self.last_rocrail_send_success = False
-            self.rocrail_status = "lost"
-            # Only start reconnect if not already running
-            if not self.reconnect_running:
-                self._start_reconnect_thread()
-            return False
-        finally:
-            self._release_socket_lock()
-        
+            except Exception as e:
+                print(f"Send error: {e}")
+                self.last_rocrail_send_success = False
+                self.rocrail_status = "lost"
+                # Only start reconnect if not already running
+                if not self.reconnect_running:
+                    self._start_reconnect_thread()
+                return False
         return False
     
     def query_locomotives(self):
         """Query all locomotives from RocRail server using specific locomotive list command"""
         debug_print(f"query_locomotives called - socket_client: {self.socket_client is not None}")
         
-        if not self._acquire_socket_lock():
-            debug_print("Could not acquire socket lock for locomotive query")
-            return False
-            
-        try:
-            if self.socket_client:
+        if self.socket_client:
+            try:
                 # Send specific locomotive list command (as used in other programs)
                 message = '<model cmd="lclist"/>'
                 message_len = len(message)
@@ -575,18 +597,16 @@ class RocrailProtocol:
                 debug_print(f"Query pending: {self.locomotive_query_pending}, Start time: {self.locomotive_query_start_time}")
                 
                 return True
-        except Exception as e:
-            print(f"Query error: {e}")
-            self.locomotive_query_pending = False
-            self.locomotive_query_start_time = 0
-            self.last_rocrail_send_success = False
-            self.rocrail_status = "lost"
-            # Only start reconnect if not already running
-            if not self.reconnect_running:
-                self._start_reconnect_thread()
-            return False
-        finally:
-            self._release_socket_lock()
-        
-        debug_print("Cannot query locomotives - no socket connection")
+            except Exception as e:
+                print(f"Query error: {e}")
+                self.locomotive_query_pending = False
+                self.locomotive_query_start_time = 0
+                self.last_rocrail_send_success = False
+                self.rocrail_status = "lost"
+                # Only start reconnect if not already running
+                if not self.reconnect_running:
+                    self._start_reconnect_thread()
+                return False
+        else:
+            debug_print("Cannot query locomotives - no socket connection")
         return False
