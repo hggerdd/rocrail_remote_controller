@@ -1,14 +1,25 @@
 # ESP32 Locomotive Controller - Task List
 
 ## Project Status
-- **Current Version**: 1.2 (Unified Hardware Configuration)
-- **Last Updated**: 2025-08-04
+- **Current Version**: 1.3 (Robust Auto-Reconnection)
+- **Last Updated**: 2025-08-05
 - **Total Tasks**: 29
-- **Completed**: 2
+- **Completed**: 3
 - **In Progress**: 0
-- **Pending**: 27
+- **Pending**: 26
 
 ## 🎯 Recent Achievements
+- **✅ Task 2.2 Completed (2025-08-05)**: Robust Auto-Reconnection Logic
+  - Implemented fast retry strategy (3s → 8s delays) with unlimited attempts
+  - Added background reconnection thread with duplicate protection and thread leak prevention
+  - Added thread-safe socket operations with simple lock mechanism
+  - Added "reconnecting" status with LED visualization (red-orange blinking)
+  - Automatic restart of locomotive query after successful reconnection
+  - Delayed reconnect activation until after stable connection to prevent boot interference
+  - Enhanced error handling with robust socket cleanup and garbage collection
+  - Connection now recovers automatically within 3-8 seconds of network issues
+  - Fixed "OSError: can't create thread" crashes with proper thread management
+
 - **✅ Task 4.1 Completed (2025-08-04)**: Unified Hardware Configuration
   - Merged `btn_config.py` and `rocrail_config.py` into unified system
   - Created `hardware_config.py` for hardware pin definitions and LED mappings  
@@ -58,12 +69,18 @@
   - **Estimated Effort**: 2 Stunden
   - **Priority**: Critical
 
-- [ ] **2.2** Robuste Reconnect-Logik implementieren
-  - [ ] Exponential Backoff für Wiederverbindungsversuche
-  - [ ] Verbindungsstatus-Recovery bei Netzwerkfehlern
-  - [ ] Thread-sichere Socket-Operation
-  - **Status**: Pending
-  - **Estimated Effort**: 3 Stunden
+- [x] **2.2** ✅ Robuste Reconnect-Logik implementieren
+  - [x] Fast retry strategy mit konfigurierbaren Delays (3s → 8s)
+  - [x] Background reconnection thread mit Thread-Leak-Schutz
+  - [x] Thread-sichere Socket-Operationen mit einfachem Lock-Mechanismus
+  - [x] Auto-Start reconnection bei Connection-Fehlern (Send/Receive/Server-Disconnect)
+  - [x] "Reconnecting" Status mit LED-Visualisierung (rot-orange blinkend)
+  - [x] Automatische Locomotive-Query-Wiederholung nach Reconnect
+  - [x] Verzögerte Reconnect-Aktivierung für Boot-Stabilität
+  - **Status**: ✅ Completed (2025-08-05)
+  - **Actual Effort**: 4 Stunden
+  - **Priority**: Critical
+  - **Benefits**: Automatische Verbindungswiederherstellung, keine Boot-Interferenz, stabile Thread-Verwaltung
 
 ### 3. Konfigurationssicherheit
 - [ ] **3.1** WiFi-Credentials sicher speichern
@@ -227,6 +244,17 @@ lib/
 - [x] WiFi-Konfiguration über Web-Interface
 - [x] Button-Controller mit Entprellung
 
+### ✅ Socket-Verbindung Stabilität (2025-08-05)
+- [x] **Task 2.2**: Robust Auto-Reconnection Logic Implementation
+  - [x] Fast retry strategy (3s → 8s delays) mit unlimited attempts
+  - [x] Background reconnection thread mit Thread-Leak-Prevention  
+  - [x] Thread-sichere Socket-Operationen mit simple Lock-Mechanismus
+  - [x] Auto-Start reconnection bei allen Connection-Fehlern
+  - [x] "Reconnecting" Status mit LED-Visualisierung (rot-orange blinkend)
+  - [x] Automatic locomotive query restart nach successful reconnection
+  - [x] Delayed reconnect activation bis nach stable connection (verhindert Boot-Crashes)
+  - [x] Enhanced error handling mit robust socket cleanup und garbage collection
+
 ### ✅ Speicher-Management und Performance (2025-08-04)
 - [x] **Task 1.1**: Modular Architecture Implementation
   - [x] `rocrail_controller.py` von 26KB auf 11KB reduziert (~700 → ~320 Zeilen)
@@ -252,8 +280,8 @@ lib/
 - ~~Große `rocrail_controller.py` Datei macht Wartung schwierig~~ ✅ **BEHOBEN** (Task 1.1)
 - ~~Globale Variablen erschweren Testing und Debugging~~ ✅ **BEHOBEN** (Task 1.1) 
 - ~~Hardware-Konfiguration verteilt auf 2 Dateien mit Konflikten~~ ✅ **BEHOBEN** (Task 4.1)
+- ~~Socket-Verbindung instabil bei Netzwerkproblemen~~ ✅ **BEHOBEN** (Task 2.2: Robust Auto-Reconnection)
 - Manueller XML-String-Bau ist fehleranfällig (→ Task 5.1: XML-Builder)
-- Socket-Verbindung könnte stabiler sein (→ Tasks 2.1, 2.2)
 - Keine strukturierte Error-Recovery (→ Task 7.1)
 
 ### Future Considerations
