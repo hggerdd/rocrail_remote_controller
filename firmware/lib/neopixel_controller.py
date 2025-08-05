@@ -62,7 +62,7 @@ class NeoPixelController:
     def rocrail_status_led(self, status, blink_toggle=False):
         """Control RocRail connection status LED (LED 1)
         Args:
-            status: 'disconnected', 'connecting', 'connected', 'lost'
+            status: 'disconnected', 'connecting', 'connected', 'lost', 'reconnecting'
             blink_toggle: True/False for blinking effect when needed
         """
         if status == 'disconnected':
@@ -74,6 +74,12 @@ class NeoPixelController:
                 self.np[LED_ROCRAIL] = (255, 165, 0)  # Orange
             else:
                 self.np[LED_ROCRAIL] = (0, 0, 0)      # Off
+        elif status == 'reconnecting':
+            # Fast blinking red while reconnecting
+            if blink_toggle:
+                self.np[LED_ROCRAIL] = (255, 100, 0)  # Red-orange
+            else:
+                self.np[LED_ROCRAIL] = (0, 0, 0)      # Off  
         elif status == 'connected':
             # Green when connected and receiving data
             self.np[LED_ROCRAIL] = (0, 255, 0)

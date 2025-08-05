@@ -22,6 +22,14 @@ MAX_LOCOMOTIVES = 5  # Limited by NeoPixel LEDs 1-5
 WIFI_CHECK_INTERVAL = 15500
 WIFI_RECONNECT_MAX_RETRIES = 5  # Maximum retries for WiFi reconnection
 ROCRAIL_CHECK_INTERVAL = 13200
+
+# RocRail reconnection settings
+RECONNECT_DELAY_FAST = 1000         # 1s für erste Versuche
+RECONNECT_DELAY_SLOW = 2000         # 2s für spätere Versuche  
+RECONNECT_FAST_ATTEMPTS = 4         # 4x schnell, dann langsamer
+RECONNECT_UNLIMITED = True          # Niemals aufgeben
+SOCKET_TIMEOUT = 5                  # Socket timeout in seconds
+
 LOCO_CHECK_INTERVAL = 100
 POTI_UPDATE_INTERVAL = 50
 BUTTON_CHECK_INTERVAL = 10

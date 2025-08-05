@@ -50,7 +50,7 @@ LED_LOCO_START = 5    # First locomotive (LEDs 5-9)
 ```
 
 **LED 0 (WiFi)**: Green blink (connected), Red blink (disconnected)
-**LED 1 (RocRail)**: Orange (disconnected), Blink orange (connecting), Green (connected), Red (lost)
+**LED 1 (RocRail)**: Orange (disconnected), Blink orange (connecting), Fast blink red-orange (reconnecting), Green (connected), Red (lost)
 **LEDs 2-3 (Direction)**: Yellow when active direction, off when inactive
 **LED 4 (Activity)**: Red blink when inactive (poti=0), off when active
 **LEDs 5-9 (Locos)**: Blue for selected locomotive, all others off (energy saving)
@@ -85,13 +85,13 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 ## Key Development Areas
 
 ### Core Architecture (`lib/protocol/`, `lib/core/`)
-- `RocrailProtocol` - TCP socket management, XML message creation/parsing, connection monitoring
+- `RocrailProtocol` - TCP socket management, XML message creation/parsing, connection monitoring, **robust auto-reconnection with fast retry logic**
 - `ControllerStateMachine` - WiFi/RocRail/speed states, safety mechanisms, event coordination
 - Modular design enables better testing and maintenance
 
 ### NeoPixel Control (`lib/neopixel_controller.py`)
 - `wifi_status_led()` - WiFi connection blinking
-- `rocrail_status_led()` - RocRail 4-state status  
+- `rocrail_status_led()` - RocRail 5-state status (added "reconnecting" state)
 - `direction_indicator_leds()` - Direction arrows
 - `activity_indicator_led()` - Activity monitoring
 - `update_locomotive_display()` - Loco selection (LEDs 5-9)
@@ -140,12 +140,13 @@ Update `README_DEVELOPMENT.md` when:
 
 ## Current Status
 - Modular architecture implemented: `RocrailProtocol` and `ControllerStateMachine` classes
+- **Robust auto-reconnection**: Fast retry logic (1s/2s delays), unlimited attempts, thread-safe socket operations
 - Main controller reduced from ~700 to ~320 lines through code extraction
-- 10 LED system fully implemented with physical labels
+- 10 LED system fully implemented with physical labels, **"reconnecting" status visualization**
 - RocRail connection tracking via send/receive monitoring  
 - Direction indicators synchronized with locomotive state
 - Energy-efficient locomotive display (only selected LED active)
-- Robust error handling and automatic recovery
+- **Advanced error handling**: Automatic recovery with background reconnection threads
 - Advanced WiFi management with interface reset and graceful recovery from internal errors
 
 Focus development on `lib/protocol/rocrail_protocol.py` for communication logic, `lib/core/controller_state.py` for state management, and `rocrail_controller.py` for system orchestration.
