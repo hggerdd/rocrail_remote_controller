@@ -70,7 +70,7 @@ class RocrailProtocol:
         """Background thread for listening to socket data"""
         print("Socket listener started")
         
-        receive_buffer_size = 4096  # Smaller buffer to prevent memory issues
+        receive_buffer_size = 4096  # min 4096 required for robust work
         consecutive_errors = 0
         
         while self.running:

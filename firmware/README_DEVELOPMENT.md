@@ -110,6 +110,13 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 
 ## Development Commands
 
+### Buffer Management Important Notes
+**CRITICAL**: XML buffer management requires minimum buffer sizes:
+- **Minimum buffer size: 4096 bytes** - smaller buffers cause parsing failures
+- Buffer truncation must preserve complete XML structures when possible
+- After locomotive loading: clear buffer regularly to prevent memory leaks
+- Monitor memory usage: ESP32 crashes when free memory drops below ~10KB
+
 ### Commit Message Format
 Always create precise, descriptive commit messages:
 ```
