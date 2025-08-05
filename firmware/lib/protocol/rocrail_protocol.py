@@ -98,8 +98,22 @@ class RocrailProtocol:
             
         try:
             if self.socket_client:
-                self.socket_client.close()
+                try:
+                    self.socket_client.close()
+                except:
+                    pass  # Ignore cleanup errors
                 self.socket_client = None
+                
+            # Force garbage collection after socket cleanup
+            try:
+                import gc
+                gc.collect()
+            except:
+                pass
+                
+            # Give system time to recover
+            time.sleep(0.1)
+                
         except Exception as e:
             print(f"Error during socket cleanup: {e}")
         finally:
@@ -139,10 +153,9 @@ class RocrailProtocol:
                 else:
                     delay = RECONNECT_DELAY_SLOW
                 
-                # Wait before retry
-                if self.reconnect_attempts > 0:  # No delay for first attempt
-                    print(f"Reconnect attempt {self.reconnect_attempts + 1} in {delay}ms...")
-                    time.sleep(delay / 1000.0)
+                # Always wait before retry (even first attempt)
+                print(f"Reconnect attempt {self.reconnect_attempts + 1} in {delay}ms...")
+                time.sleep(delay / 1000.0)
                 
                 # Check if we should still continue
                 if not self.reconnect_running:
@@ -156,8 +169,9 @@ class RocrailProtocol:
                 # Attempt reconnection
                 print(f"Reconnecting to {self.host}:{self.port} (attempt {self.reconnect_attempts})...")
                 
-                # Clean up old connection
+                # Clean up old connection with pause
                 self._cleanup_socket()
+                time.sleep(0.5)  # Give system time to recover
                 
                 # Try to establish new connection
                 if self._attempt_connection():
@@ -168,21 +182,26 @@ class RocrailProtocol:
                     # Restart locomotive query after reconnection
                     if not self.locomotives_loaded:
                         print("Restarting locomotive query after reconnection...")
-                        time.sleep(0.5)  # Brief delay before querying
+                        time.sleep(1.0)  # Longer delay before querying
                         self.query_locomotives()
                     
                     # Successfully connected - exit loop
                     break
                 
+                # Progressive backoff for stability
+                if self.reconnect_attempts > 10:
+                    print("Many attempts - adding extra pause for system recovery...")
+                    time.sleep(5)  # Extra pause after many attempts
+                
                 # Limit attempts to prevent infinite loops
-                if self.reconnect_attempts > 50:  # Safety limit
-                    print("Too many reconnect attempts, pausing...")
-                    time.sleep(10)  # 10 second pause
-                    self.reconnect_attempts = 10  # Reset to slower retry mode
+                if self.reconnect_attempts > 30:  # Reduced safety limit
+                    print("Too many reconnect attempts, long pause...")
+                    time.sleep(30)  # 30 second pause
+                    self.reconnect_attempts = 5   # Reset to slower retry mode
                 
             except Exception as e:
                 print(f"Reconnection error: {e}")
-                # Continue loop despite error
+                time.sleep(1)  # Pause on error
                 
         print("Reconnection loop ended")
         self.reconnect_running = False
@@ -191,6 +210,7 @@ class RocrailProtocol:
         """Attempt to establish socket connection"""
         try:
             if not self._acquire_socket_lock():
+                print("Could not acquire lock for connection attempt")
                 return False
                 
             # Create new socket with timeout
@@ -198,6 +218,7 @@ class RocrailProtocol:
             self.socket_client.settimeout(SOCKET_TIMEOUT)
             
             # Connect to server
+            print(f"Attempting connection to {self.host}:{self.port}...")
             self.socket_client.connect((self.host, self.port))
             
             # Connection successful
@@ -206,9 +227,13 @@ class RocrailProtocol:
             self.last_rocrail_send_success = True
             self.running = True
             
+            # Brief pause before starting listener
+            time.sleep(0.2)
+            
             # Start listener thread
             _thread.start_new_thread(self.socket_listener, ())
             
+            print("Connection successful!")
             return True
             
         except Exception as e:
@@ -220,6 +245,14 @@ class RocrailProtocol:
                 except:
                     pass
                 self.socket_client = None
+                
+            # Force garbage collection on failed connection
+            try:
+                import gc
+                gc.collect()
+            except:
+                pass
+                
             return False
         finally:
             self._release_socket_lock()
@@ -248,28 +281,28 @@ class RocrailProtocol:
             except OSError as e:
                 # Network-related errors
                 consecutive_errors += 1
-                if consecutive_errors > 10:
+                if consecutive_errors > 20:  # Increased threshold
                     print(f"Socket listener: Too many consecutive errors ({consecutive_errors}), starting reconnect")
                     self.rocrail_status = "lost"
                     # Only start reconnect if not already running
                     if not self.reconnect_running:
                         self._start_reconnect_thread()
                     break
-                time.sleep(0.01)
+                time.sleep(0.05)  # Longer pause between error retries
                 continue
             except Exception as e:
                 # Other errors - log and continue
                 consecutive_errors += 1
                 if consecutive_errors <= 3:  # Only log first few errors to avoid spam
                     print(f"Socket listener error: {e}")
-                if consecutive_errors > 20:
+                if consecutive_errors > 30:  # Increased threshold
                     print(f"Socket listener: Critical error count ({consecutive_errors}), starting reconnect")
                     self.rocrail_status = "lost"
                     # Only start reconnect if not already running
                     if not self.reconnect_running:
                         self._start_reconnect_thread()
                     break
-                time.sleep(0.01)
+                time.sleep(0.05)  # Longer pause between error retries
                 continue
         
         print("Socket listener stopped")

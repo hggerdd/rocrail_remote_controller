@@ -24,11 +24,11 @@ WIFI_RECONNECT_MAX_RETRIES = 5  # Maximum retries for WiFi reconnection
 ROCRAIL_CHECK_INTERVAL = 13200
 
 # RocRail reconnection settings
-RECONNECT_DELAY_FAST = 1000         # 1s für erste Versuche
-RECONNECT_DELAY_SLOW = 2000         # 2s für spätere Versuche  
-RECONNECT_FAST_ATTEMPTS = 4         # 4x schnell, dann langsamer
+RECONNECT_DELAY_FAST = 3000         # 3s für erste Versuche (weniger aggressiv)
+RECONNECT_DELAY_SLOW = 8000         # 8s für spätere Versuche  
+RECONNECT_FAST_ATTEMPTS = 3         # nur 3x schnell, dann langsamer
 RECONNECT_UNLIMITED = True          # Niemals aufgeben
-SOCKET_TIMEOUT = 5                  # Socket timeout in seconds
+SOCKET_TIMEOUT = 10                 # Socket timeout in seconds (erhöht)
 
 LOCO_CHECK_INTERVAL = 100
 POTI_UPDATE_INTERVAL = 50
