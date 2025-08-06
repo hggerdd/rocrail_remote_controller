@@ -175,22 +175,6 @@ def reconnect_wifi(state_machine):
     print("WiFi reconnection failed after interface reset")
     return False
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def handle_locomotive_selection(state_machine, rocrail_protocol):
     """Handle locomotive selection button presses"""
     selection_changed = False
@@ -465,3 +449,4 @@ if run:
                 
         except KeyboardInterrupt:
             print("Program interrupted during WiFi recovery")
+            
