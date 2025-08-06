@@ -90,14 +90,15 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - Modular design enables better testing and maintenance
 
 ### NeoPixel Control (`lib/neopixel_controller.py`)
-- `wifi_status_led()` - WiFi connection blinking
-- `rocrail_status_led()` - RocRail 5-state status (added "reconnecting" state)
-- `direction_indicator_leds()` - Direction arrows
-- `activity_indicator_led()` - Activity monitoring
-- `update_locomotive_display()` - Loco selection (LEDs 5-9)
-- **RMT Resource Management**: 1ms delays between writes, 100ms recovery pauses to prevent resource exhaustion
-- **Automatic Recovery**: Smart recovery with counter reset on success for long-term stability
-- **Fallback Mode**: System continues operation even when LEDs fail permanently
+- Simple, reliable LED control with minimal error handling
+- `wifi_status_led()` - WiFi connection status (green/orange/red)
+- `rocrail_status_led()` - RocRail connection states
+- `direction_indicator_leds()` - Direction arrows (yellow)
+- `poti_zero_request_led()` - Purple blink when poti reset needed
+- `update_locomotive_display()` - Blue LED for selected loco
+- **Simplified Design**: Silent error handling, no complex recovery
+- **Lean Implementation**: Focus on core functionality
+- **Reliable Operation**: Minimal overhead, fast response
 
 ### Main Control Loop (`rocrail_controller.py`)
 - WiFi management with robust reconnection and interface reset
@@ -114,22 +115,19 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 
 ## Common Issues & Solutions
 
-### NeoPixel RMT Hardware Failures
-**Symptoms**: `E rmt(legacy): RMT translator buffer create fail`, `OSError: ESP_ERR_INVALID_STATE`
-**Root Cause**: ESP32 RMT (Remote Control Transceiver) **resource exhaustion from frequent LED updates**
-**Implemented Solutions**:
-- **Automatic Recovery System**: 3 attempts to reinitialize RMT driver when failures occur
-- **RMT Resource Protection**: 1ms delays between writes + 100ms recovery pauses to prevent resource exhaustion  
-- **Reduced Update Frequency**: LED blinks every 1000ms (was 500ms) to reduce RMT load
-- **Success Counter Reset**: Recovery counter resets after successful operations for long-term stability
-- **Fallback Mode**: System continues locomotive control without LEDs if recovery fails
-- **Comprehensive Logging**: All RMT failures visible but non-fatal
+### NeoPixel Simplified Design
+**Previous Issues**: Complex RMT error recovery caused code bloat
+**Current Solution**: Simplified controller with silent error handling
+- **Minimal Error Handling**: Write errors silently ignored
+- **Clean Code**: Removed complex recovery mechanisms
+- **Reliable Operation**: Basic functionality prioritized
+- **Fast Response**: No delays or recovery attempts
+- **Fallback**: Controller continues if LEDs fail
 
-**Result**: System remains fully functional with automatic recovery from temporary RMT resource issues.
-
-**Alternative Hardware Solutions** (if needed):
-- Change `NEOPIXEL_PIN` from 5 to alternative pin (25, 26, 27)
-- Disable LEDs entirely: `neopixel_ctrl.force_disable()`
+**Hardware Notes**:
+- Uses pin 5 for NeoPixel data (10 LEDs)
+- Alternative pins if needed: 25, 26, 27
+- Disable with: `neopixel_ctrl.force_disable()`
 
 ## Development Commands
 
@@ -162,19 +160,19 @@ Update `README_DEVELOPMENT.md` when:
 **XML Commands**: Implement in send functions with error handling and status updates
 
 ## Current Status
-- Modular architecture implemented: `RocrailProtocol` and `ControllerStateMachine` classes
-- **Robust auto-reconnection**: Fast retry logic (1s/2s delays), unlimited attempts, thread-safe socket operations
-- Main controller reduced from ~700 to ~320 lines through code extraction
-- 10 LED system fully implemented with physical labels, **"reconnecting" status visualization**
+- Modular architecture: `RocrailProtocol` and `ControllerStateMachine` classes
+- **Robust auto-reconnection**: Fast retry logic, unlimited attempts
+- Main controller maintained at ~320 lines through modular design
+- **Simplified NeoPixel**: Clean, lean implementation without complex recovery
+- 10 LED system with physical labels, status visualization
 - RocRail connection tracking via send/receive monitoring  
 - Direction indicators synchronized with locomotive state
 - Energy-efficient locomotive display (only selected LED active)
-- **Advanced error handling**: Automatic recovery with background reconnection threads
-- Advanced WiFi management with interface reset and graceful recovery from internal errors
-- **Startup stabilization**: 3-second delay after socket connection prevents thread race conditions
-- **RMT Resource Management**: Automatic recovery from ESP32 RMT failures with resource protection and reduced update frequency
+- Advanced WiFi management with interface reset capability
+- **Startup stabilization**: 3-second delay prevents race conditions
+- **Reliable LED control**: Simplified error handling for stability
 
-Focus development on `lib/protocol/rocrail_protocol.py` for communication logic, `lib/core/controller_state.py` for state management, and `rocrail_controller.py` for system orchestration.
+Focus: `lib/protocol/rocrail_protocol.py` for communication, `lib/core/controller_state.py` for state management, `rocrail_controller.py` for orchestration.
 
 ## Development Planning
 See `TASKS.md` for comprehensive task list, priorities, and development roadmap. Tasks are categorized by urgency (Critical/Medium/Low) with effort estimates and dependencies tracked.
