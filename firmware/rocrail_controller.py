@@ -264,6 +264,11 @@ if run:
             wifi_blink_toggle = False
             rocrail_blink_toggle = False
             
+            # STARTUP STABILIZATION: Prevent socket operations during first seconds
+            startup_time = time.ticks_ms()
+            startup_grace_period = 5000  # 5 seconds grace period
+            print(f"System startup - {startup_grace_period}ms grace period before poti updates enabled...")
+            
             try:
                 # Main program loop
                 while True:
@@ -339,50 +344,75 @@ if run:
                             print(f"[LOCO_DEBUG] Locomotive query already pending (started: {rocrail_protocol.get_query_start_time()})")
                     
                     # regularly update the poti/button input controller (required to have enough values for mean)
+                    # BUT respect startup grace period to prevent early socket crashes
                     if timer.is_ready("send_poti_update", POTI_UPDATE_INTERVAL):
                         
-                        # update speed from poti position/angle
+                        # Check if we're still in startup grace period
+                        current_time = time.ticks_ms()
+                        time_since_startup = time.ticks_diff(current_time, startup_time)
+                        in_grace_period = time_since_startup < startup_grace_period
+                        
+                        # Always read poti for filter stabilization (but don't send commands during grace period)
                         speed = speed_poti.read()
                         
-                        # check direction button(incl. debouncing),
-                        # toggle direction and set speed to 0,
-                        # disable speed sending until the
-                        # selection (poti) is set to speed 0
-                        if direction_button.is_pressed():
-                            loco_dir = "true" if loco_dir == "false" else "false"
-                            rocrail_protocol.send_speed_and_direction(0, loco_dir)
-                            state_machine.handle_direction_change()
-                            # Update direction indicator LEDs
-                            neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
-                            print(f"Direction: {loco_dir} - POTI ZERO REQUIRED (purple LED blinking)")
+                        # Only process buttons and send commands AFTER grace period
+                        if not in_grace_period:
+                            # check direction button(incl. debouncing),
+                            # toggle direction and set speed to 0,
+                            # disable speed sending until the
+                            # selection (poti) is set to speed 0
+                            if direction_button.is_pressed():
+                                loco_dir = "true" if loco_dir == "false" else "false"
+                                rocrail_protocol.send_speed_and_direction(0, loco_dir)
+                                state_machine.handle_direction_change()
+                                # Update direction indicator LEDs
+                                neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
+                                print(f"Direction: {loco_dir} - POTI ZERO REQUIRED (purple LED blinking)")
+                                
+                            # check emergency button
+                            if emergency_button.is_pressed():
+                                rocrail_protocol.send_speed_and_direction(0, loco_dir)
+                                state_machine.handle_emergency_stop()
+                                print("EMERGENCY STOP - POTI ZERO REQUIRED (purple LED blinking)")
                             
-                        # check emergency button
-                        if emergency_button.is_pressed():
-                            rocrail_protocol.send_speed_and_direction(0, loco_dir)
-                            state_machine.handle_emergency_stop()
-                            print("EMERGENCY STOP - POTI ZERO REQUIRED (purple LED blinking)")
-                        
-                        # Light button pressed, toggle the light
-                        if light_button.is_pressed():
-                            loco_light = "true" if loco_light == "false" else "false"
-                            rocrail_protocol.send_light_command(loco_light)
-                            print(f"Light: {loco_light}")
-                            
-                        # Sound button pressed
-                        if sound_button.is_pressed():
-                            print("Horn activated")
+                            # Light button pressed, toggle the light
+                            if light_button.is_pressed():
+                                loco_light = "true" if loco_light == "false" else "false"
+                                rocrail_protocol.send_light_command(loco_light)
+                                print(f"Light: {loco_light}")
+                                
+                            # Sound button pressed
+                            if sound_button.is_pressed():
+                                print("Horn activated")
+                        else:
+                            # During grace period, show remaining time every 1000ms
+                            if timer.is_ready("grace_period_info", 1000):
+                                remaining_ms = startup_grace_period - time_since_startup
+                                print(f"Startup stabilization: {remaining_ms}ms remaining (poti reading: {speed}, but commands blocked)")
                 
                     # every SPEED_UPDATE_INTERVAL check if speed has changed and can be updated (avoid too many commands)
+                    # BUT also respect startup grace period
                     if timer.is_ready("update_speed", SPEED_UPDATE_INTERVAL):
-                        if state_machine.is_speed_sending_enabled():
-                            if (speed != last_speed):
-                                print(f"Speed: {speed} (enabled: {state_machine.is_speed_sending_enabled()})")
-                                rocrail_protocol.send_speed_and_direction(speed, loco_dir)
-                                last_speed = speed
-                        else:
-                            state_machine.check_speed_enable_condition(speed)
+                        current_time = time.ticks_ms()
+                        time_since_startup = time.ticks_diff(current_time, startup_time)
+                        in_grace_period = time_since_startup < startup_grace_period
+                        
+                        if not in_grace_period:
                             if state_machine.is_speed_sending_enabled():
-                                print("Speed sending re-enabled - poti zero request cleared (purple LED off)")                       
+                                if (speed != last_speed):
+                                    print(f"Speed: {speed} (enabled: {state_machine.is_speed_sending_enabled()})")
+                                    rocrail_protocol.send_speed_and_direction(speed, loco_dir)
+                                    last_speed = speed
+                            else:
+                                state_machine.check_speed_enable_condition(speed)
+                                if state_machine.is_speed_sending_enabled():
+                                    print("Speed sending re-enabled - poti zero request cleared (purple LED off)")
+                        else:
+                            # During grace period, don't send speed commands but log what would happen
+                            if time_since_startup < 1000:  # Only log during first second to avoid spam
+                                if speed != last_speed:
+                                    print(f"Grace period: Speed change detected ({speed}) but not sent yet")
+                                    last_speed = speed                       
                     
                     # Periodic cleanup after locomotives are loaded (every 5 minutes)
                     if rocrail_protocol.are_locomotives_loaded() and timer.is_ready("periodic_cleanup", 300000):

@@ -101,6 +101,7 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - Hardware controller integration (buttons, potentiometer, LEDs)
 - System orchestration using RocrailProtocol and ControllerStateMachine classes
 - Timing-based event processing with safety mechanisms
+- **Startup stabilization**: 5-second grace period prevents socket crashes when poti moved immediately after boot
 
 ### Configuration (`config.py` + `hardware_config.py`)
 - WiFi credentials and RocRail server settings (`config.py`)
@@ -148,6 +149,7 @@ Update `README_DEVELOPMENT.md` when:
 - Energy-efficient locomotive display (only selected LED active)
 - **Advanced error handling**: Automatic recovery with background reconnection threads
 - Advanced WiFi management with interface reset and graceful recovery from internal errors
+- **Startup stabilization**: 5-second grace period prevents socket crashes from immediate poti usage
 
 Focus development on `lib/protocol/rocrail_protocol.py` for communication logic, `lib/core/controller_state.py` for state management, and `rocrail_controller.py` for system orchestration.
 
