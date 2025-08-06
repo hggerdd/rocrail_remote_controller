@@ -33,14 +33,37 @@ btn_up = ButtonController(pin_num=BTN_MITTE_UP, debounce_ms=5)
 btn_down = ButtonController(pin_num=BTN_MITTE_DOWN, debounce_ms=5)
 
 # Initialize NeoPixel controller - turns off all LEDs at startup
-neopixel_ctrl = NeoPixelController(pin_num=NEOPIXEL_PIN, num_leds=NEOPIXEL_COUNT)
+try:
+    neopixel_ctrl = NeoPixelController(pin_num=NEOPIXEL_PIN, num_leds=NEOPIXEL_COUNT)
+    print("[STARTUP] NeoPixel controller initialized successfully")
+except Exception as e:
+    print(f"[STARTUP] NeoPixel initialization failed: {e}")
+    print("[STARTUP] Creating dummy NeoPixel controller - LEDs disabled")
+    # Create a dummy controller that does nothing
+    class DummyNeoPixelController:
+        def is_enabled(self): return False
+        def all_off(self): pass
+        def wifi_status_led(self, *args): pass
+        def rocrail_status_led(self, *args): pass
+        def direction_indicator_leds(self, *args): pass
+        def poti_zero_request_led(self, *args): pass
+        def update_locomotive_display(self, *args): pass
+        def clear_locomotive_display(self): pass
+        def force_disable(self): pass
+    neopixel_ctrl = DummyNeoPixelController()
 
 def update_locomotive_display():
     """Update NeoPixel display to show current locomotive selection"""
-    selected_index = loco_list.get_selected_index()
-    total_locos = loco_list.get_count()
-    neopixel_ctrl.update_locomotive_display(selected_index, total_locos)
-    print(loco_list.get_status_string())
+    try:
+        selected_index = loco_list.get_selected_index()
+        total_locos = loco_list.get_count()
+        if neopixel_ctrl.is_enabled():
+            neopixel_ctrl.update_locomotive_display(selected_index, total_locos)
+        print(loco_list.get_status_string())
+    except Exception as e:
+        print(f"[ERROR] Exception in locomotive display update: {e}")
+        if neopixel_ctrl:
+            neopixel_ctrl.force_disable()
 
 # Initialize protocol and state management
 print("[LOCO_DEBUG] Initializing RocrailProtocol with locomotive list and display callback...")
@@ -49,12 +72,20 @@ state_machine = ControllerStateMachine()
 print(f"[LOCO_DEBUG] RocrailProtocol initialized - callback set: {rocrail_protocol.display_update_callback is not None}")
 
 # Set initial LED states before any connections
-# WiFi indicator: initial orange (before attempting connection)
-neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status())
-# RocRail indicator: disconnected state
-neopixel_ctrl.rocrail_status_led(rocrail_protocol.get_status())
-# Clear all other LEDs
-neopixel_ctrl.clear_locomotive_display()
+try:
+    if neopixel_ctrl.is_enabled():
+        # WiFi indicator: initial orange (before attempting connection)
+        neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status())
+        # RocRail indicator: disconnected state
+        neopixel_ctrl.rocrail_status_led(rocrail_protocol.get_status())
+        # Clear all other LEDs
+        neopixel_ctrl.clear_locomotive_display()
+        print("[STARTUP] Initial LED states set")
+    else:
+        print("[STARTUP] LEDs disabled - skipping initial LED setup")
+except Exception as e:
+    print(f"[STARTUP] Initial LED setup failed: {e}")
+    neopixel_ctrl.force_disable()
 
 def reset_wifi_interface():
     """Reset WiFi interface to recover from internal errors"""
@@ -128,7 +159,12 @@ def connect_wifi(ssid, password, state_machine, max_retries=10):
             # Blink the LED every 500ms during connection
             if time.ticks_diff(current_time, last_blink_time) >= NEOPIXEL_BLINK_INTERVAL:
                 blink_toggle = not blink_toggle
-                neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), blink_toggle)
+                try:
+                    if neopixel_ctrl.is_enabled():
+                        neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), blink_toggle)
+                except Exception as e:
+                    print(f"[ERROR] WiFi connect LED blink failed: {e}")
+                    neopixel_ctrl.force_disable()
                 last_blink_time = current_time
             
             # Check connection more frequently than before
@@ -195,7 +231,12 @@ def handle_locomotive_selection(state_machine, rocrail_protocol):
     if selection_changed:
         update_locomotive_display()
         # Update direction indicator LEDs for new locomotive
-        neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
+        try:
+            if neopixel_ctrl.is_enabled():
+                neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
+        except Exception as e:
+            print(f"[ERROR] Direction LED update in selection failed: {e}")
+            neopixel_ctrl.force_disable()
         # Reset speed sending to ensure new locomotive starts safely
         state_machine.handle_locomotive_change()
         rocrail_protocol.send_speed_and_direction(0, loco_dir)
@@ -238,7 +279,13 @@ if run:
             initialize_locomotive_list(rocrail_protocol)
             
             # Initialize direction indicator LEDs with current direction
-            neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
+            try:
+                if neopixel_ctrl.is_enabled():
+                    neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
+                    print("[STARTUP] Direction LEDs initialized")
+            except Exception as e:
+                print(f"[STARTUP] Direction LED initialization failed: {e}")
+                neopixel_ctrl.force_disable()
             
             # SIMPLE STARTUP STABILIZATION: Short delay for thread stabilization
             print("System startup - waiting 3 seconds for socket stabilization...")
@@ -305,23 +352,25 @@ if run:
                             # Try to reset interface for next check
                             reset_wifi_interface()
                     
-                    # Update WiFi and status LEDs (blinking) with recovery
-                    if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
-                        wifi_blink_toggle = not wifi_blink_toggle
-                        rocrail_blink_toggle = not rocrail_blink_toggle
-                        neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), wifi_blink_toggle)
-                        # Update RocRail status LED
-                        neopixel_ctrl.rocrail_status_led(rocrail_protocol.get_status(), rocrail_blink_toggle)
-                        # Update poti zero request LED (5th LED) - blinks purple when poti must be set to zero
-                        neopixel_ctrl.poti_zero_request_led(not state_machine.is_speed_sending_enabled(), wifi_blink_toggle)
-                        
-                        # Check LED status occasionally and attempt recovery if needed
-                        if not neopixel_ctrl.is_enabled() and timer.is_ready("led_recovery_check", 30000):
-                            print("[LED] Attempting NeoPixel recovery...")
-                            if neopixel_ctrl.try_recovery():
-                                print("[LED] NeoPixel recovery successful!")
+                    # Update WiFi and status LEDs (blinking) - REDUCED FREQUENCY to protect RMT
+                    if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL * 2):  # Double interval = half frequency
+                        try:
+                            wifi_blink_toggle = not wifi_blink_toggle
+                            rocrail_blink_toggle = not rocrail_blink_toggle
+                            
+                            # Skip LED updates if NeoPixel is disabled to prevent hangs
+                            if neopixel_ctrl.is_enabled():
+                                neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), wifi_blink_toggle)
+                                neopixel_ctrl.rocrail_status_led(rocrail_protocol.get_status(), rocrail_blink_toggle)
+                                neopixel_ctrl.poti_zero_request_led(not state_machine.is_speed_sending_enabled(), wifi_blink_toggle)
                             else:
-                                print("[LED] NeoPixel recovery failed - continuing without LEDs")
+                                # LEDs disabled - log periodically
+                                if timer.is_ready("led_disabled_info", 15000):
+                                    print("[LED] NeoPixel disabled - continuing without LED status")
+                        except Exception as e:
+                            print(f"[LED] Exception in LED updates - disabling LEDs: {e}")
+                            neopixel_ctrl.force_disable()
+                            print("[LED] LEDs permanently disabled due to errors")
                     
                     # Handle locomotive selection buttons
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
@@ -351,28 +400,38 @@ if run:
                             # disable speed sending until the
                             # selection (poti) is set to speed 0
                             if direction_button.is_pressed():
+                                print(f"[DEBUG] Direction button pressed")
                                 loco_dir = "true" if loco_dir == "false" else "false"
                                 rocrail_protocol.send_speed_and_direction(0, loco_dir)
                                 state_machine.handle_direction_change()
                                 # Update direction indicator LEDs
-                                neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
+                                try:
+                                    if neopixel_ctrl.is_enabled():
+                                        neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
+                                except Exception as e:
+                                    print(f"[ERROR] Direction LED update failed: {e}")
+                                    neopixel_ctrl.force_disable()
                                 print(f"Direction: {loco_dir} - POTI ZERO REQUIRED (purple LED blinking)")
                                 
                             # check emergency button
                             if emergency_button.is_pressed():
+                                print(f"[DEBUG] Emergency button pressed")
                                 rocrail_protocol.send_speed_and_direction(0, loco_dir)
                                 state_machine.handle_emergency_stop()
                                 print("EMERGENCY STOP - POTI ZERO REQUIRED (purple LED blinking)")
                             
                             # Light button pressed, toggle the light
                             if light_button.is_pressed():
+                                print(f"[DEBUG] Light button pressed")
                                 loco_light = "true" if loco_light == "false" else "false"
                                 rocrail_protocol.send_light_command(loco_light)
                                 print(f"Light: {loco_light}")
                                 
                             # Sound button pressed
                             if sound_button.is_pressed():
+                                print(f"[DEBUG] Sound button pressed")
                                 print("Horn activated")
+                                
                         except Exception as e:
                             print(f"[ERROR] Exception in poti/button handling: {e}")
                             import sys
@@ -408,9 +467,13 @@ if run:
                         except Exception as e:
                             print(f"[CLEANUP] Error during cleanup: {e}")
                     
-                    # Heartbeat every 10 seconds to show main loop is alive
-                    if timer.is_ready("heartbeat", 10000):
-                        print(f"[HEARTBEAT] Main loop alive - WiFi: {state_machine.get_wifi_status()}, RocRail: {rocrail_protocol.get_status()}")
+                    # Heartbeat every 5 seconds to show main loop is alive with detailed status
+                    if timer.is_ready("heartbeat", 5000):
+                        wifi_status = state_machine.get_wifi_status()
+                        rocrail_status = rocrail_protocol.get_status()
+                        leds_enabled = neopixel_ctrl.is_enabled() if neopixel_ctrl else False
+                        led_recovery_count = neopixel_ctrl.recovery_attempts if hasattr(neopixel_ctrl, 'recovery_attempts') else 0
+                        print(f"[HEARTBEAT] Loop alive - WiFi:{wifi_status} RocRail:{rocrail_status} LEDs:{leds_enabled} Recoveries:{led_recovery_count} Speed:{speed}")
                     
                     # Small delay to prevent CPU hogging
                     time.sleep(0.05)
@@ -422,7 +485,12 @@ if run:
         print("WiFi connection failed")
         # WiFi status is already set to "failed" by connect_wifi function
         # Clear locomotive display
-        neopixel_ctrl.clear_locomotive_display()
+        try:
+            if neopixel_ctrl.is_enabled():
+                neopixel_ctrl.clear_locomotive_display()
+        except Exception as e:
+            print(f"[ERROR] LED clear failed: {e}")
+            neopixel_ctrl.force_disable()
         
         # Keep trying to reconnect and blink red LED
         timer = IntervalTimer()
@@ -433,7 +501,12 @@ if run:
                 # Update WiFi status LED (blinking red)
                 if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
                     wifi_blink_toggle = not wifi_blink_toggle
-                    neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), wifi_blink_toggle)
+                    try:
+                        if neopixel_ctrl.is_enabled():
+                            neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), wifi_blink_toggle)
+                    except Exception as e:
+                        print(f"[ERROR] WiFi recovery LED update failed: {e}")
+                        neopixel_ctrl.force_disable()
                 
                 # Try to reconnect WiFi periodically with robust method
                 if timer.is_ready("wifi_reconnect", WIFI_CHECK_INTERVAL):

@@ -26,7 +26,7 @@ LED_LOCO_START = 5        # First locomotive LED (LEDs 5-9 = locos 1-5)
 LED_LOCO_END = 9          # Last locomotive LED
 
 # NeoPixel Settings
-NEOPIXEL_BLINK_INTERVAL = 500  # ms for blinking effect
+NEOPIXEL_BLINK_INTERVAL = 500  # ms for blinking effect (base interval, may be adjusted in code)
 
 # Backward compatibility aliases (für schrittweise Migration)
 POTI_PIN = ADC_GESCHWINDIGKEIT  # Alias für rocrail_config.py compatibility

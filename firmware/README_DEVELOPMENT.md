@@ -95,7 +95,8 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - `direction_indicator_leds()` - Direction arrows
 - `activity_indicator_led()` - Activity monitoring
 - `update_locomotive_display()` - Loco selection (LEDs 5-9)
-- **RMT Error Recovery**: Automatic recovery from ESP32 RMT hardware failures
+- **RMT Resource Management**: 1ms delays between writes, 100ms recovery pauses to prevent resource exhaustion
+- **Automatic Recovery**: Smart recovery with counter reset on success for long-term stability
 - **Fallback Mode**: System continues operation even when LEDs fail permanently
 
 ### Main Control Loop (`rocrail_controller.py`)
@@ -115,15 +116,20 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 
 ### NeoPixel RMT Hardware Failures
 **Symptoms**: `E rmt(legacy): RMT translator buffer create fail`, `OSError: ESP_ERR_INVALID_STATE`
-**Cause**: ESP32 RMT (Remote Control Transceiver) hardware driver conflicts or resource exhaustion
-**Solutions**:
-- Automatic recovery system attempts 3 reinitializations
-- Fallback mode continues controller operation without LEDs
-- Manual recovery attempt every 30 seconds in main loop
-- **Hardware fix**: Change `NEOPIXEL_PIN` from 5 to alternative pin (25, 26, 27)
-- **Alternative**: Disable LEDs entirely: `neopixel_ctrl.force_disable()`
+**Root Cause**: ESP32 RMT (Remote Control Transceiver) **resource exhaustion from frequent LED updates**
+**Implemented Solutions**:
+- **Automatic Recovery System**: 3 attempts to reinitialize RMT driver when failures occur
+- **RMT Resource Protection**: 1ms delays between writes + 100ms recovery pauses to prevent resource exhaustion  
+- **Reduced Update Frequency**: LED blinks every 1000ms (was 500ms) to reduce RMT load
+- **Success Counter Reset**: Recovery counter resets after successful operations for long-term stability
+- **Fallback Mode**: System continues locomotive control without LEDs if recovery fails
+- **Comprehensive Logging**: All RMT failures visible but non-fatal
 
-System remains fully functional for locomotive control even when LEDs fail.
+**Result**: System remains fully functional with automatic recovery from temporary RMT resource issues.
+
+**Alternative Hardware Solutions** (if needed):
+- Change `NEOPIXEL_PIN` from 5 to alternative pin (25, 26, 27)
+- Disable LEDs entirely: `neopixel_ctrl.force_disable()`
 
 ## Development Commands
 
@@ -166,7 +172,7 @@ Update `README_DEVELOPMENT.md` when:
 - **Advanced error handling**: Automatic recovery with background reconnection threads
 - Advanced WiFi management with interface reset and graceful recovery from internal errors
 - **Startup stabilization**: 3-second delay after socket connection prevents thread race conditions
-- **RMT Error Recovery**: Automatic NeoPixel recovery from ESP32 RMT hardware failures with fallback mode
+- **RMT Resource Management**: Automatic recovery from ESP32 RMT failures with resource protection and reduced update frequency
 
 Focus development on `lib/protocol/rocrail_protocol.py` for communication logic, `lib/core/controller_state.py` for state management, and `rocrail_controller.py` for system orchestration.
 

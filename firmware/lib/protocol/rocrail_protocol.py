@@ -548,7 +548,8 @@ class RocrailProtocol:
         if self.socket_client:
             try:
                 print(f"Sending light command: {light_on_off} for loco ID {current_loco_id}")
-                message = f'<fn id="{current_loco_id}" fn=0 on="{light_on_off}"/>'
+                # message = f'<fn id="{current_loco_id}" fn=0 on="{light_on_off}"/>'
+                message = f'<fn id="{current_loco_id}" f0="{light_on_off}" fnchanged="3"/>'
                 message_len = len(message)
                 message_and_header = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
                 self.socket_client.send(message_and_header.encode())

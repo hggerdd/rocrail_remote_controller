@@ -33,12 +33,19 @@ class NeoPixelController:
             return False
     
     def _safe_write(self):
-        """Safely write to NeoPixel with error recovery"""
+        """Safely write to NeoPixel with error recovery and resource protection"""
         if not self.led_enabled:
             return False
+        
+        # Add small delay to prevent RMT resource exhaustion
+        time.sleep(0.001)  # 1ms delay between writes to protect RMT
             
         try:
             self.np.write()
+            # Success! Reset recovery counter for future errors
+            if self.recovery_attempts > 0:
+                self.recovery_attempts = 0
+                print("[NEOPIXEL] Write successful - recovery counter reset")
             return True
         except Exception as e:
             current_time = time.ticks_ms()
@@ -47,18 +54,26 @@ class NeoPixelController:
             if self.recovery_attempts < self.max_recovery_attempts:
                 # Limit recovery attempts to once per second
                 if time.ticks_diff(current_time, self.last_error_time) > 1000:
-                    print(f"[NEOPIXEL] Write error: {e}, attempting recovery ({self.recovery_attempts + 1}/{self.max_recovery_attempts})")
+                    print(f"[NEOPIXEL] RMT failure: {e}, attempting recovery ({self.recovery_attempts + 1}/{self.max_recovery_attempts})")
                     self.recovery_attempts += 1
                     self.last_error_time = current_time
+                    
+                    # Add longer delay before recovery to let RMT settle
+                    time.sleep(0.1)
                     
                     # Try to reinitialize NeoPixel
                     if self._init_neopixel():
                         print("[NEOPIXEL] Recovery successful")
                         try:
+                            # Brief pause before retry
+                            time.sleep(0.01)
                             self.np.write()
+                            # Success after recovery - reset counter
+                            self.recovery_attempts = 0
+                            print("[NEOPIXEL] Post-recovery write successful")
                             return True
-                        except:
-                            pass
+                        except Exception as retry_error:
+                            print(f"[NEOPIXEL] Post-recovery write failed: {retry_error}")
                     
             else:
                 # Too many failed attempts - disable LEDs
