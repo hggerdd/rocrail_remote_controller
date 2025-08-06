@@ -7,7 +7,7 @@ from hardware_config import LED_WIFI, LED_ROCRAIL, LED_DIR_LEFT, LED_DIR_RIGHT, 
 # Adjust these values to change the "dim" brightness when LEDs are in their off/dim state
 LED_BRIGHT = 255        # Full brightness for "on" state
 LED_DIM_HIGH = 50       # Dimmer brightness for status indicators (e.g., WiFi connected)
-LED_DIM_LOW = 20        # Low brightness for "off" state during blinking
+LED_DIM_LOW = 5        # Low brightness for "off" state during blinking
 LED_DIM_MIN = 10        # Minimum brightness for barely visible state
 
 class NeoPixelController:
@@ -18,6 +18,8 @@ class NeoPixelController:
         self.pin_num = pin_num
         self.num_leds = num_leds
         self.enabled = True
+
+        self.update_requested = False
         
         try:
             self.pin = Pin(self.pin_num, Pin.OUT)
@@ -32,11 +34,27 @@ class NeoPixelController:
         """Write to NeoPixel with minimal safety check"""
         if not self.enabled:
             return
-        try:
+        try: 
             self.np.write()
+            #self.update_requested = True  # Mark that an update is requested
+            #pass
         except:
             pass  # Silently ignore write errors
     
+    def get_requested_update(self):
+        """Check if an update is requested"""
+        return self.update_requested
+    
+    def _write2(self):
+        """Write to NeoPixel with minimal safety check"""
+        if not self.enabled:
+            return
+        try: 
+            #self.np.write()
+            self.update_requested = False
+        except:
+            pass  # Silently ignore write errors
+
     def all_off(self):
         """Turn off all LEDs"""
         if not self.enabled:

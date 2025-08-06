@@ -322,7 +322,9 @@ if run:
                             neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), wifi_blink_toggle)
                             neopixel_ctrl.rocrail_status_led(rocrail_protocol.get_status(), rocrail_blink_toggle)
                             neopixel_ctrl.poti_zero_request_led(not state_machine.is_speed_sending_enabled(), wifi_blink_toggle)
-                    
+
+                        #neopixel_ctrl._write2()  # Write updated LED states
+
                     # Handle locomotive selection buttons
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
                         handle_locomotive_selection(state_machine, rocrail_protocol)
@@ -337,6 +339,8 @@ if run:
                     
                     # regularly update the poti/button input controller (required to have enough values for mean)
                     if timer.is_ready("send_poti_update", POTI_UPDATE_INTERVAL):
+                        if neopixel_ctrl.get_requested_update():
+                            neopixel_ctrl._write2()
                         try:
                             # update speed from poti position/angle
                             speed = speed_poti.read()
