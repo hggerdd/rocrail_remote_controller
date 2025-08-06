@@ -32,13 +32,13 @@ red_button   = Pin(BTN_NOTHALT, Pin.IN, Pin.PULL_UP)
 green_button = Pin(BTN_RICHTUNGSWECHEL, Pin.IN, Pin.PULL_UP)
 
 # Small delay to allow button state to stabilize
-time.sleep_ms(200)
+time.sleep_ms(150)
 
 # Check if button is pressed (LOW when using pull-up)
 if not red_button.value():
     
     print("\n\nRED Button pressed - Starting WiFi and rocrail configuration server...")
-    time.sleep_ms(200)  # Debounce delay
+    time.sleep_ms(100)  # Debounce delay
     
     try:
         import wifi_config_server
