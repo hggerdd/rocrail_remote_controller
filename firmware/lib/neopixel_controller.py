@@ -3,6 +3,13 @@ from neopixel import NeoPixel
 import time
 from hardware_config import LED_WIFI, LED_ROCRAIL, LED_DIR_LEFT, LED_DIR_RIGHT, LED_ACTIVITY, LED_LOCO_START, LED_LOCO_END
 
+# Brightness configuration for LED states (0-255)
+# Adjust these values to change the "dim" brightness when LEDs are in their off/dim state
+LED_BRIGHT = 255        # Full brightness for "on" state
+LED_DIM_HIGH = 50       # Dimmer brightness for status indicators (e.g., WiFi connected)
+LED_DIM_LOW = 20        # Low brightness for "off" state during blinking
+LED_DIM_MIN = 10        # Minimum brightness for barely visible state
+
 class NeoPixelController:
     """Simple and reliable NeoPixel controller for 10 status LEDs"""
     
@@ -51,11 +58,14 @@ class NeoPixelController:
             return
             
         if status == 'connected':
-            color = (0, 255, 0) if blink else (0, 50, 0)  # Green (bright/dim)
+            # Green: bright when active, dim when inactive
+            color = (0, LED_BRIGHT, 0) if blink else (0, LED_DIM_HIGH, 0)
         elif status == 'connecting' or status == 'initial':
-            color = (255, 165, 0) if blink else (0, 0, 0)  # Orange blink
+            # Orange: bright when active, dim when inactive  
+            color = (LED_BRIGHT, 165, 0) if blink else (LED_DIM_LOW, LED_DIM_LOW//2, 0)
         elif status == 'failed':
-            color = (255, 0, 0) if blink else (0, 0, 0)  # Red blink
+            # Red: bright when active, dim when inactive
+            color = (LED_BRIGHT, 0, 0) if blink else (LED_DIM_LOW, 0, 0)
         else:
             color = (0, 0, 0)
         
@@ -68,13 +78,17 @@ class NeoPixelController:
             return
             
         if status == 'connected':
-            color = (0, 255, 0)  # Solid green
+            # Solid green (no blinking needed when connected)
+            color = (0, LED_BRIGHT, 0)
         elif status == 'connecting' or status == 'disconnected':
-            color = (255, 165, 0) if blink else (0, 0, 0)  # Orange blink
+            # Orange: bright when active, dim when inactive
+            color = (LED_BRIGHT, 165, 0) if blink else (LED_DIM_LOW, LED_DIM_LOW//2, 0)
         elif status == 'reconnecting':
-            color = (255, 100, 0) if blink else (0, 0, 0)  # Red-orange fast blink
+            # Red-orange: fast blink between bright and dim
+            color = (LED_BRIGHT, 100, 0) if blink else (LED_DIM_HIGH, LED_DIM_LOW, 0)
         elif status == 'lost':
-            color = (255, 0, 0)  # Solid red
+            # Solid red (no blinking)
+            color = (LED_BRIGHT, 0, 0)
         else:
             color = (0, 0, 0)
         
@@ -87,11 +101,11 @@ class NeoPixelController:
             return
             
         if forward:
-            self.np[LED_DIR_LEFT] = (255, 255, 0)   # "<" yellow
-            self.np[LED_DIR_RIGHT] = (0, 0, 0)      # ">" off
+            self.np[LED_DIR_LEFT] = (LED_BRIGHT, LED_BRIGHT, 0)   # "<" yellow bright
+            self.np[LED_DIR_RIGHT] = (0, 0, 0)                     # ">" off
         else:
-            self.np[LED_DIR_LEFT] = (0, 0, 0)       # "<" off
-            self.np[LED_DIR_RIGHT] = (255, 255, 0)  # ">" yellow
+            self.np[LED_DIR_LEFT] = (0, 0, 0)                      # "<" off
+            self.np[LED_DIR_RIGHT] = (LED_BRIGHT, LED_BRIGHT, 0)   # ">" yellow bright
         self._write()
     
     def poti_zero_request_led(self, required, blink=False):
@@ -100,7 +114,8 @@ class NeoPixelController:
             return
             
         if required:
-            color = (255, 0, 255) if blink else (0, 0, 0)  # Purple blink
+            # Purple: bright when active, dim when inactive
+            color = (LED_BRIGHT, 0, LED_BRIGHT) if blink else (LED_DIM_LOW, 0, LED_DIM_LOW)
         else:
             color = (0, 0, 0)  # Off when normal
         
@@ -119,9 +134,9 @@ class NeoPixelController:
         for i in range(LED_LOCO_START, min(LED_LOCO_END + 1, LED_LOCO_START + total_count)):
             loco_idx = i - LED_LOCO_START
             if loco_idx == selected_idx:
-                self.np[i] = (0, 0, 255)  # Blue for selected
+                self.np[i] = (0, 0, LED_BRIGHT)  # Blue bright for selected
             else:
-                self.np[i] = (0, 0, 0)    # Off for others
+                self.np[i] = (0, 0, 0)            # Off for others (energy saving)
         
         # Clear unused locomotive LEDs
         for i in range(LED_LOCO_START + total_count, LED_LOCO_END + 1):

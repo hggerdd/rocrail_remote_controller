@@ -49,11 +49,17 @@ LED_ACTIVITY = 4      # Activity indicator
 LED_LOCO_START = 5    # First locomotive (LEDs 5-9)
 ```
 
-**LED 0 (WiFi)**: Green blink (connected), Red blink (disconnected)
-**LED 1 (RocRail)**: Orange (disconnected), Blink orange (connecting), Fast blink red-orange (reconnecting), Green (connected), Red (lost)
-**LEDs 2-3 (Direction)**: Yellow when active direction, off when inactive
-**LED 4 (Activity)**: Red blink when inactive (poti=0), off when active
-**LEDs 5-9 (Locos)**: Blue for selected locomotive, all others off (energy saving)
+**LED 0 (WiFi)**: Green (bright/dim pulse when connected), Orange (bright/dim blink when connecting), Red (bright/dim blink when failed)
+**LED 1 (RocRail)**: Solid green (connected), Orange bright/dim blink (connecting), Red-orange fast bright/dim (reconnecting), Solid red (lost)
+**LEDs 2-3 (Direction)**: Bright yellow for active direction, off for inactive
+**LED 4 (Activity)**: Purple bright/dim blink when poti zero required, off when normal
+**LEDs 5-9 (Locos)**: Bright blue for selected locomotive, off for others (energy saving)
+
+**Brightness Levels** (configurable in `lib/neopixel_controller.py`):
+- `LED_BRIGHT = 255` - Full brightness for active/on states
+- `LED_DIM_HIGH = 50` - Medium dim for connected states  
+- `LED_DIM_LOW = 20` - Low dim for "off" phase of blinking
+- `LED_DIM_MIN = 10` - Minimum brightness (currently unused)
 
 ### Button Configuration
 ```python
@@ -90,15 +96,15 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - Modular design enables better testing and maintenance
 
 ### NeoPixel Control (`lib/neopixel_controller.py`)
-- Simple, reliable LED control with minimal error handling
-- `wifi_status_led()` - WiFi connection status (green/orange/red)
-- `rocrail_status_led()` - RocRail connection states
+- Simple, reliable LED control with configurable brightness levels
+- `wifi_status_led()` - WiFi status with dim/bright states instead of on/off
+- `rocrail_status_led()` - RocRail connection with smooth brightness transitions
 - `direction_indicator_leds()` - Direction arrows (yellow)
-- `poti_zero_request_led()` - Purple blink when poti reset needed
+- `poti_zero_request_led()` - Purple dim/bright when poti reset needed
 - `update_locomotive_display()` - Blue LED for selected loco
-- **Simplified Design**: Silent error handling, no complex recovery
-- **Lean Implementation**: Focus on core functionality
-- **Reliable Operation**: Minimal overhead, fast response
+- **Brightness Configuration**: Adjustable LED_BRIGHT/LED_DIM values at top of file
+- **Smooth Blinking**: Uses brightness variation instead of on/off for better visibility
+- **Energy Efficient**: Dim states reduce power consumption while maintaining visibility
 
 ### Main Control Loop (`rocrail_controller.py`)
 - WiFi management with robust reconnection and interface reset
