@@ -95,19 +95,35 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - `direction_indicator_leds()` - Direction arrows
 - `activity_indicator_led()` - Activity monitoring
 - `update_locomotive_display()` - Loco selection (LEDs 5-9)
+- **RMT Error Recovery**: Automatic recovery from ESP32 RMT hardware failures
+- **Fallback Mode**: System continues operation even when LEDs fail permanently
 
 ### Main Control Loop (`rocrail_controller.py`)
 - WiFi management with robust reconnection and interface reset
 - Hardware controller integration (buttons, potentiometer, LEDs)
 - System orchestration using RocrailProtocol and ControllerStateMachine classes
 - Timing-based event processing with safety mechanisms
-- **Startup stabilization**: 5-second grace period prevents socket crashes when poti moved immediately after boot
+- **Startup stabilization**: 3-second delay after socket connection prevents thread race conditions
 
 ### Configuration (`config.py` + `hardware_config.py`)
 - WiFi credentials and RocRail server settings (`config.py`)
 - Timing intervals and locomotive management settings (`config.py`)
 - Hardware pin assignments and LED mappings (`hardware_config.py`)
 - WiFi reconnection parameters and recovery settings (`config.py`)
+
+## Common Issues & Solutions
+
+### NeoPixel RMT Hardware Failures
+**Symptoms**: `E rmt(legacy): RMT translator buffer create fail`, `OSError: ESP_ERR_INVALID_STATE`
+**Cause**: ESP32 RMT (Remote Control Transceiver) hardware driver conflicts or resource exhaustion
+**Solutions**:
+- Automatic recovery system attempts 3 reinitializations
+- Fallback mode continues controller operation without LEDs
+- Manual recovery attempt every 30 seconds in main loop
+- **Hardware fix**: Change `NEOPIXEL_PIN` from 5 to alternative pin (25, 26, 27)
+- **Alternative**: Disable LEDs entirely: `neopixel_ctrl.force_disable()`
+
+System remains fully functional for locomotive control even when LEDs fail.
 
 ## Development Commands
 
@@ -149,7 +165,8 @@ Update `README_DEVELOPMENT.md` when:
 - Energy-efficient locomotive display (only selected LED active)
 - **Advanced error handling**: Automatic recovery with background reconnection threads
 - Advanced WiFi management with interface reset and graceful recovery from internal errors
-- **Startup stabilization**: 5-second grace period prevents socket crashes from immediate poti usage
+- **Startup stabilization**: 3-second delay after socket connection prevents thread race conditions
+- **RMT Error Recovery**: Automatic NeoPixel recovery from ESP32 RMT hardware failures with fallback mode
 
 Focus development on `lib/protocol/rocrail_protocol.py` for communication logic, `lib/core/controller_state.py` for state management, and `rocrail_controller.py` for system orchestration.
 

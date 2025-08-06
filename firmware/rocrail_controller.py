@@ -256,6 +256,11 @@ if run:
             # Initialize direction indicator LEDs with current direction
             neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
             
+            # SIMPLE STARTUP STABILIZATION: Short delay for thread stabilization
+            print("System startup - waiting 3 seconds for socket stabilization...")
+            time.sleep(3.0)
+            print("Startup stabilization complete - system ready")
+            
             # Initialise speed values
             last_speed = -1
             speed = 0
@@ -263,11 +268,6 @@ if run:
             # Initialize WiFi status blinking
             wifi_blink_toggle = False
             rocrail_blink_toggle = False
-            
-            # STARTUP STABILIZATION: Prevent socket operations during first seconds
-            startup_time = time.ticks_ms()
-            startup_grace_period = 5000  # 5 seconds grace period
-            print(f"System startup - {startup_grace_period}ms grace period before poti updates enabled...")
             
             try:
                 # Main program loop
@@ -321,7 +321,7 @@ if run:
                             # Try to reset interface for next check
                             reset_wifi_interface()
                     
-                    # Update WiFi and status LEDs (blinking)
+                    # Update WiFi and status LEDs (blinking) with recovery
                     if timer.is_ready("neopixel_blink", NEOPIXEL_BLINK_INTERVAL):
                         wifi_blink_toggle = not wifi_blink_toggle
                         rocrail_blink_toggle = not rocrail_blink_toggle
@@ -330,10 +330,23 @@ if run:
                         neopixel_ctrl.rocrail_status_led(rocrail_protocol.get_status(), rocrail_blink_toggle)
                         # Update poti zero request LED (5th LED) - blinks purple when poti must be set to zero
                         neopixel_ctrl.poti_zero_request_led(not state_machine.is_speed_sending_enabled(), wifi_blink_toggle)
+                        
+                        # Check LED status occasionally and attempt recovery if needed
+                        if not neopixel_ctrl.is_enabled() and timer.is_ready("led_recovery_check", 30000):
+                            print("[LED] Attempting NeoPixel recovery...")
+                            if neopixel_ctrl.try_recovery():
+                                print("[LED] NeoPixel recovery successful!")
+                            else:
+                                print("[LED] NeoPixel recovery failed - continuing without LEDs")
                     
                     # Handle locomotive selection buttons
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
-                        handle_locomotive_selection(state_machine, rocrail_protocol)
+                        try:
+                            handle_locomotive_selection(state_machine, rocrail_protocol)
+                        except Exception as e:
+                            print(f"[ERROR] Exception in locomotive selection: {e}")
+                            import sys
+                            sys.print_exception(e)
                     
                     # Query locomotives periodically only if we haven't loaded them yet
                     if not rocrail_protocol.are_locomotives_loaded() and timer.is_ready("query_locomotives", LOCO_QUERY_INTERVAL):
@@ -344,19 +357,11 @@ if run:
                             print(f"[LOCO_DEBUG] Locomotive query already pending (started: {rocrail_protocol.get_query_start_time()})")
                     
                     # regularly update the poti/button input controller (required to have enough values for mean)
-                    # BUT respect startup grace period to prevent early socket crashes
                     if timer.is_ready("send_poti_update", POTI_UPDATE_INTERVAL):
-                        
-                        # Check if we're still in startup grace period
-                        current_time = time.ticks_ms()
-                        time_since_startup = time.ticks_diff(current_time, startup_time)
-                        in_grace_period = time_since_startup < startup_grace_period
-                        
-                        # Always read poti for filter stabilization (but don't send commands during grace period)
-                        speed = speed_poti.read()
-                        
-                        # Only process buttons and send commands AFTER grace period
-                        if not in_grace_period:
+                        try:
+                            # update speed from poti position/angle
+                            speed = speed_poti.read()
+                            
                             # check direction button(incl. debouncing),
                             # toggle direction and set speed to 0,
                             # disable speed sending until the
@@ -384,20 +389,14 @@ if run:
                             # Sound button pressed
                             if sound_button.is_pressed():
                                 print("Horn activated")
-                        else:
-                            # During grace period, show remaining time every 1000ms
-                            if timer.is_ready("grace_period_info", 1000):
-                                remaining_ms = startup_grace_period - time_since_startup
-                                print(f"Startup stabilization: {remaining_ms}ms remaining (poti reading: {speed}, but commands blocked)")
+                        except Exception as e:
+                            print(f"[ERROR] Exception in poti/button handling: {e}")
+                            import sys
+                            sys.print_exception(e)
                 
                     # every SPEED_UPDATE_INTERVAL check if speed has changed and can be updated (avoid too many commands)
-                    # BUT also respect startup grace period
                     if timer.is_ready("update_speed", SPEED_UPDATE_INTERVAL):
-                        current_time = time.ticks_ms()
-                        time_since_startup = time.ticks_diff(current_time, startup_time)
-                        in_grace_period = time_since_startup < startup_grace_period
-                        
-                        if not in_grace_period:
+                        try:
                             if state_machine.is_speed_sending_enabled():
                                 if (speed != last_speed):
                                     print(f"Speed: {speed} (enabled: {state_machine.is_speed_sending_enabled()})")
@@ -407,12 +406,10 @@ if run:
                                 state_machine.check_speed_enable_condition(speed)
                                 if state_machine.is_speed_sending_enabled():
                                     print("Speed sending re-enabled - poti zero request cleared (purple LED off)")
-                        else:
-                            # During grace period, don't send speed commands but log what would happen
-                            if time_since_startup < 1000:  # Only log during first second to avoid spam
-                                if speed != last_speed:
-                                    print(f"Grace period: Speed change detected ({speed}) but not sent yet")
-                                    last_speed = speed                       
+                        except Exception as e:
+                            print(f"[ERROR] Exception in speed handling: {e}")
+                            import sys
+                            sys.print_exception(e)                       
                     
                     # Periodic cleanup after locomotives are loaded (every 5 minutes)
                     if rocrail_protocol.are_locomotives_loaded() and timer.is_ready("periodic_cleanup", 300000):
@@ -426,6 +423,10 @@ if run:
                             print(f"[CLEANUP] Memory after cleanup: {free_mem} bytes free")
                         except Exception as e:
                             print(f"[CLEANUP] Error during cleanup: {e}")
+                    
+                    # Heartbeat every 10 seconds to show main loop is alive
+                    if timer.is_ready("heartbeat", 10000):
+                        print(f"[HEARTBEAT] Main loop alive - WiFi: {state_machine.get_wifi_status()}, RocRail: {rocrail_protocol.get_status()}")
                     
                     # Small delay to prevent CPU hogging
                     time.sleep(0.05)
