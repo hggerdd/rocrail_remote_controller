@@ -102,18 +102,18 @@ class AsyncHardwareManager:
         return False
         
     def _normalize_speed(self, raw_value):
-        """Normalize potentiometer raw value to 0-126 speed range"""
+        """Normalize potentiometer raw value to 0-100 speed range"""
         # Apply calibrated range from adc_test.py
         if raw_value <= self.POTI_MIN_VALUE:
             normalized = 0
         elif raw_value >= self.POTI_MAX_VALUE:
-            normalized = 126  # Maximum locomotive speed
+            normalized = 100  # Maximum locomotive speed
         else:
-            # Map calibrated range to 0-126
+            # Map calibrated range to 0-100
             ratio = (raw_value - self.POTI_MIN_VALUE) / (self.POTI_MAX_VALUE - self.POTI_MIN_VALUE)
-            normalized = int(ratio * 126)
+            normalized = int(ratio * 100)
             
-        return max(0, min(126, normalized))
+        return max(0, min(100, normalized))
         
     async def _read_speed_filtered(self):
         """Read speed potentiometer with filtering and calibration"""
@@ -132,7 +132,7 @@ class AsyncHardwareManager:
             # Calculate filtered average
             filtered_speed = sum(self._speed_samples) // len(self._speed_samples)
             
-            return max(0, min(126, filtered_speed))
+            return max(0, min(100, filtered_speed))
             
         except Exception as e:
             print(f"Speed read error: {e}")

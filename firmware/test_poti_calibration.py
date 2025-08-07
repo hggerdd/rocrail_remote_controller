@@ -11,7 +11,7 @@ async def test_poti_calibration():
     """Test potentiometer calibration with real-time feedback"""
     print("=== Potentiometer Calibration Test ===")
     print(f"Calibrated range: 1310 - 2360 (raw ADC)")
-    print(f"Output range: 0 - 126 (locomotive speed)")
+    print(f"Output range: 0 - 100 (locomotive speed)")
     print("Turn the potentiometer to test calibration")
     print("Press Ctrl+C to exit\n")
     
@@ -61,7 +61,7 @@ async def test_poti_calibration():
         print(f"\nFinal reading:")
         print(f"Raw ADC: {final_raw}")
         print(f"Normalized: {final_normalized}")
-        print(f"Range coverage: {((final_normalized / 126) * 100):.1f}%")
+        print(f"Range coverage: {((final_normalized / 100) * 100):.1f}%")
 
 async def test_poti_range():
     """Test the full potentiometer range"""

@@ -147,7 +147,7 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 ### Potentiometer Calibration
 **Physical Range Limitation**: Due to mechanical constraints, the potentiometer cannot use the full ADC range (0-4095).
 **Calibrated Range**: 1310-2360 (from adc_test.py measurements)
-**Output Mapping**: Calibrated range mapped to 0-126 locomotive speed
+**Output Mapping**: Calibrated range mapped to 0-100 locomotive speed
 **Testing**: Use `python test_poti_calibration.py` to verify calibration accuracy
 
 ## Communication Protocol

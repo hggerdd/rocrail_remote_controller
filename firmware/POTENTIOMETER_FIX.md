@@ -6,7 +6,7 @@ The AsyncIO hardware controller was missing the potentiometer calibration that a
 ## Problem Details
 - **Physical constraint**: Potentiometer cannot reach full ADC range (0-4095)
 - **Actual range**: Only 1310-2360 usable due to mechanical stops
-- **Missing mapping**: AsyncIO implementation used simple linear 0-4095 → 0-126 mapping
+- **Missing mapping**: AsyncIO implementation used simple linear 0-4095 → 0-100 mapping
 - **Result**: Only partial speed control, inconsistent with legacy controller
 
 ## Solution Applied
@@ -23,11 +23,11 @@ def _normalize_speed(self, raw_value):
     if raw_value <= self.POTI_MIN_VALUE:
         normalized = 0
     elif raw_value >= self.POTI_MAX_VALUE:
-        normalized = 126  # Maximum locomotive speed
+        normalized = 100  # Maximum locomotive speed
     else:
         ratio = (raw_value - self.POTI_MIN_VALUE) / (self.POTI_MAX_VALUE - self.POTI_MIN_VALUE)
-        normalized = int(ratio * 126)
-    return max(0, min(126, normalized))
+        normalized = int(ratio * 100)
+    return max(0, min(100, normalized))
 ```
 
 ### 3. Updated Speed Reading
@@ -47,23 +47,23 @@ python test_poti_calibration.py
 Raw ADC | Normalized | Status
 -------|------------|--------
    1310 |         0  | In range (minimum)
-   1835 |        63  | In range (middle)
-   2360 |       126  | In range (maximum)
+   1835 |        50  | In range (middle)
+   2360 |       100  | In range (maximum)
 ```
 
 ### Integration Test
 ```bash
 python test_buttons_asyncio.py
 ```
-Now shows: `🎛️ Speed: 63 (Raw: 1835, Range: 1310-2360)`
+Now shows: `🎛️ Speed: 50 (Raw: 1835, Range: 1310-2360)`
 
 ## Verification Points
 
 ✅ **Minimum Position**: Raw ~1310 → Speed 0  
-✅ **Maximum Position**: Raw ~2360 → Speed 126  
-✅ **Mid Position**: Raw ~1835 → Speed ~63  
+✅ **Maximum Position**: Raw ~2360 → Speed 100  
+✅ **Mid Position**: Raw ~1835 → Speed ~50  
 ✅ **Below Range**: Raw <1310 → Speed 0 (clamped)  
-✅ **Above Range**: Raw >2360 → Speed 126 (clamped)  
+✅ **Above Range**: Raw >2360 → Speed 100 (clamped)  
 
 ## Files Updated
 
@@ -90,7 +90,7 @@ If calibration causes issues:
 3. **Disable calibration** (temporary):
    ```python
    def _normalize_speed(self, raw_value):
-       return int((raw_value / 4095.0) * 126)  # Simple linear mapping
+       return int((raw_value / 4095.0) * 100)  # Simple linear mapping
    ```
 
 The potentiometer should now provide smooth speed control across its full mechanical range! 🎛️
