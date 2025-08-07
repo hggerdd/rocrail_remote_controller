@@ -101,6 +101,13 @@ New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces poll
    queue_event = asyncio.Event()
    ```
 
+
+
+9. **Boot LED indicators with asyncio**
+   - **Cause**: AsyncNeoPixelController requires event loop, not available in boot.py
+   - **Solution**: Direct NeoPixel control in boot.py before asyncio initialization
+   - **Files**: `boot.py`
+   - **Indicators**: Orange (boot), Purple (config mode), Green (normal operation)
 2. **`writer.is_closing()` method missing** → Use `hasattr()` checks
    ```python
    # ❌ Fails: 'Stream' object has no attribute 'is_closing'

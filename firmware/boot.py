@@ -27,17 +27,26 @@ from machine import Pin
 import sys
 import time
 from hardware_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL, NEOPIXEL_PIN, NEOPIXEL_COUNT
-from lib.neopixel_controller import NeoPixelController
 from hardware_config import LED_ROCRAIL
 
-# turn off all neopixels at startup
-np_ctrl = NeoPixelController(NEOPIXEL_PIN, NEOPIXEL_COUNT)
-np_ctrl.all_off()
-np_ctrl.refresh()
+# Direct NeoPixel control for boot phase (before asyncio)
+try:
+    from neopixel import NeoPixel
+    neo = NeoPixel(Pin(NEOPIXEL_PIN), NEOPIXEL_COUNT)
+    
+    # Clear all LEDs at startup
+    for i in range(NEOPIXEL_COUNT):
+        neo[i] = (0, 0, 0)
+    neo.write()
+    
+    # Set LED_ROCRAIL to orange (boot indicator)
+    neo[LED_ROCRAIL] = (255, 165, 0)  # Orange
+    neo.write()
+    LEDS_AVAILABLE = True
+except Exception as e:
+    print(f"NeoPixel init failed in boot: {e}")
+    LEDS_AVAILABLE = False
 
-# Set LED_ROCRAIL to orange (preliminary state)
-np_ctrl.set_led(LED_ROCRAIL, 255, 165, 0)  # Orange
-np_ctrl.refresh()
 
 # Configure your button pin (adjust pin number for your board)
 red_button   = Pin(BTN_NOTHALT, Pin.IN, Pin.PULL_UP)
@@ -48,9 +57,10 @@ time.sleep_ms(150)
 
 # Check if button is pressed (LOW when using pull-up)
 if not red_button.value():
-    # Set LED_ROCRAIL to purple
-    np_ctrl.set_led(LED_ROCRAIL, 128, 0, 128)  # Purple
-    np_ctrl.refresh()
+    # Set LED_ROCRAIL to purple for config mode
+    if LEDS_AVAILABLE:
+        neo[LED_ROCRAIL] = (128, 0, 128)  # Purple
+        neo.write()
 
     print("\n\nRED Button pressed - Starting WiFi and rocrail configuration server...")
     time.sleep_ms(100)  # Debounce delay
@@ -68,13 +78,15 @@ elif not green_button.value():  # Green button pressed at startup
     # Do nothing else, drop to REPL
 
 else:
-    # Set LED_ROCRAIL to green
-    np_ctrl.set_led(LED_ROCRAIL, 0, 255, 0)  # Green
-    np_ctrl.refresh()
+    # Set LED_ROCRAIL to green for normal operation
+    if LEDS_AVAILABLE:
+        neo[LED_ROCRAIL] = (0, 255, 0)  # Green
+        neo.write()
     
     print("\n\nNormal startup - Running main program...")
     try:
         import rocrail_controller_asyncio
+        rocrail_controller_asyncio.run_controller()
     except ImportError:
         print("Error: rocrail_controller_asyncio.py not found!")
 
