@@ -29,26 +29,6 @@ class NeoPixelController:
         except Exception as e:
             print(f"[NEOPIXEL] Init failed: {e}")
             self.enabled = False
-    
-    def _write(self):
-        """Write to NeoPixel with minimal safety check"""
-        if not self.enabled:
-            return
-        try: 
-            self.np.write()
-        except:
-            pass  # Silently ignore write errors
-    
-    def _write2(self):
-        """Alternative write method for stability - call periodically"""
-        if not self.enabled:
-            return
-        try:
-            # Force refresh without changing colors
-            self.np.write()
-            return True
-        except:
-            return False
 
     def all_off(self):
         """Turn off all LEDs"""
@@ -56,14 +36,12 @@ class NeoPixelController:
             return
         for i in range(self.num_leds):
             self.np[i] = (0, 0, 0)
-        self._write()
     
     def set_led(self, led_num, r, g, b):
         """Set individual LED color"""
         if not self.enabled or not (0 <= led_num < self.num_leds):
             return
         self.np[led_num] = (r, g, b)
-        self._write()
     
     def wifi_status_led(self, status, blink=False):
         """WiFi status LED (0) - Green=connected, Orange=connecting, Red=failed"""
@@ -83,7 +61,6 @@ class NeoPixelController:
             color = (0, 0, 0)
         
         self.np[LED_WIFI] = color
-        self._write()
     
     def rocrail_status_led(self, status, blink=False):
         """RocRail status LED (1) - Green=connected, Orange=connecting, Red=lost"""
@@ -106,7 +83,6 @@ class NeoPixelController:
             color = (0, 0, 0)
         
         self.np[LED_ROCRAIL] = color
-        self._write()
     
     def direction_indicator_leds(self, forward):
         """Direction LEDs (2-3) - Yellow shows active direction"""
@@ -119,7 +95,6 @@ class NeoPixelController:
         else:
             self.np[LED_DIR_LEFT] = (0, 0, 0)                      # "<" off
             self.np[LED_DIR_RIGHT] = (LED_BRIGHT, LED_BRIGHT, 0)   # ">" yellow bright
-        self._write()
     
     def poti_zero_request_led(self, required, blink=False):
         """Activity LED (4) - Purple blink when poti zero required"""
@@ -133,7 +108,6 @@ class NeoPixelController:
             color = (0, 0, 0)  # Off when normal
         
         self.np[LED_ACTIVITY] = color
-        self._write()
     
     def activity_indicator_led(self, active, blink=False):
         """Backward compatibility wrapper"""
@@ -154,8 +128,6 @@ class NeoPixelController:
         # Clear unused locomotive LEDs
         for i in range(LED_LOCO_START + total_count, LED_LOCO_END + 1):
             self.np[i] = (0, 0, 0)
-        
-        self._write()
     
     def clear_locomotive_display(self):
         """Turn off all locomotive LEDs"""
@@ -163,7 +135,6 @@ class NeoPixelController:
             return
         for i in range(LED_LOCO_START, LED_LOCO_END + 1):
             self.np[i] = (0, 0, 0)
-        self._write()
     
     def is_enabled(self):
         """Check if LEDs are operational"""
@@ -177,8 +148,12 @@ class NeoPixelController:
     def refresh(self):
         """Periodic refresh to prevent lockups - call every few seconds"""
         if not self.enabled:
+            return
+        try:
+            self.np.write()
+            return True
+        except:
             return False
-        return self._write2()
     
     def try_recovery(self):
         """Simple recovery attempt"""
