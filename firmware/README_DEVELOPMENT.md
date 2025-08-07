@@ -103,11 +103,18 @@ New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces poll
 
 
 
-9. **Boot LED indicators with asyncio**
+9. **Boot LED indicators with asyncio** ✅ **RESOLVED**
    - **Cause**: AsyncNeoPixelController requires event loop, not available in boot.py
    - **Solution**: Direct NeoPixel control in boot.py before asyncio initialization
    - **Files**: `boot.py`
    - **Indicators**: Orange (boot), Purple (config mode), Green (normal operation)
+
+10. **AsyncIO LED startup delay** ✅ **RESOLVED** 
+   - **Cause**: LED update task waited for complete initialization before starting
+   - **Solution**: LED task starts immediately after hardware init, during WiFi/RocRail connection
+   - **Files**: `rocrail_controller_asyncio.py`, `async_leds.py`
+   - **Result**: Instant LED feedback during connection attempts, no more ~30s delay
+   - **Architecture**: LED task launches in `initialize()` before network connections
 2. **`writer.is_closing()` method missing** → Use `hasattr()` checks
    ```python
    # ❌ Fails: 'Stream' object has no attribute 'is_closing'

@@ -47,18 +47,30 @@ class LocomotiveControllerAsync:
         """Initialize all subsystems"""
         print("Initializing asyncio controller...")
         
-        # Initialize hardware
+        # Initialize hardware first
         await self.hardware.initialize()
         await self.leds.initialize()
         
-        # Connect WiFi
+        # START LED TASK IMMEDIATELY for instant visual feedback
+        print("Starting LED feedback task...")
+        led_task = asyncio.create_task(self._led_update_task())
+        self.tasks.append(led_task)
+        
+        # Give LED task a moment to show startup sequence
+        await asyncio.sleep(0.1)
+        
+        # Set initial status and connect WiFi
+        await self.state.set_wifi_status("connecting")
+        await self.state.set_rocrail_status("connecting")
+        
+        # Connect WiFi (LEDs now show progress)
         if await self.wifi.connect():
             await self.state.set_wifi_status("connected")
         else:
             await self.state.set_wifi_status("failed")
             return False
             
-        # Connect to RocRail
+        # Connect to RocRail (LEDs show progress)  
         if await self.protocol.connect(ROCRAIL_HOST, ROCRAIL_PORT):
             await self.state.set_rocrail_status("connected")
         else:
@@ -83,21 +95,20 @@ class LocomotiveControllerAsync:
         await self.protocol.query_locomotives()
         
     async def start_tasks(self):
-        """Start all async tasks"""
-        print("Starting async tasks...")
+        """Start remaining async tasks (LED task already started in initialize)"""
+        print("Starting remaining async tasks...")
         
-        # Core system tasks
+        # Core system tasks (LED task already running)
         self.tasks.extend([
             asyncio.create_task(self._hardware_input_task()),
             asyncio.create_task(self._speed_control_task()),
-            asyncio.create_task(self._led_update_task()),
             asyncio.create_task(self._wifi_monitor_task()),
             asyncio.create_task(self._protocol_monitor_task()),
             asyncio.create_task(self._memory_monitor_task()),
             asyncio.create_task(self._heartbeat_task())
         ])
         
-        print(f"Started {len(self.tasks)} async tasks")
+        print(f"Total tasks running: {len(self.tasks)}")
         
     async def _hardware_input_task(self):
         """Handle hardware input processing"""
@@ -185,12 +196,15 @@ class LocomotiveControllerAsync:
             await asyncio.sleep(SPEED_UPDATE_INTERVAL / 1000.0)
             
     async def _led_update_task(self):
-        """Handle LED status updates"""
+        """Handle LED status updates - starts immediately for connection feedback"""
         print("LED update task started")
+        
+        # Show startup sequence immediately
+        await self.leds.show_startup_sequence()
         
         while True:
             try:
-                # Update all LED states
+                # Update all LED states immediately (no system_ready wait)
                 wifi_status = await self.state.get_wifi_status()
                 rocrail_status = await self.state.get_rocrail_status()
                 speed_enabled = await self.state.is_speed_enabled()
@@ -316,7 +330,7 @@ class LocomotiveControllerAsync:
                 try:
                     # Wait for any task to complete (shouldn't happen in normal operation)
                     await asyncio.sleep(1)
-                    
+
                     # Check if any tasks have failed
                     failed_tasks = []
                     for task in self.tasks:

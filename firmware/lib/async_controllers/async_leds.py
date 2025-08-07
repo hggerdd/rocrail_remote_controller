@@ -191,16 +191,22 @@ class AsyncNeoPixelController:
             
         print("LED startup sequence...")
         
-        # Quick sweep of all LEDs
-        for i in range(NEOPIXEL_COUNT):
-            await self._set_led(i, (50, 50, 50), force_update=True)
-            await asyncio.sleep(0.1)
-            
-        # Clear all
-        await self._clear_all()
+        # Flash WiFi LED orange (initializing)
+        await self._set_led(LED_WIFI, (255, 165, 0), force_update=True)
         await asyncio.sleep(0.2)
         
-        print("✓ LED startup complete")
+        # Flash RocRail LED orange (initializing) 
+        await self._set_led(LED_ROCRAIL, (255, 165, 0), force_update=True)
+        await asyncio.sleep(0.2)
+        
+        # Quick sweep of locomotive LEDs to show system alive
+        for i in range(5):
+            led_index = LED_LOCO_START + i
+            await self._set_led(led_index, (0, 0, 100), force_update=True)
+            await asyncio.sleep(0.05)
+            await self._set_led(led_index, (0, 0, 0), force_update=True)
+            
+        print("✓ LED startup complete - ready for status updates")
         
     async def show_error_pattern(self):
         """Show error pattern on LEDs"""
