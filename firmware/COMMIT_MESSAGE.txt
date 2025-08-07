@@ -1,0 +1,10 @@
+fix: Implement robust auto-reconnection for WiFi/Rocrail connection loss
+
+- Add automatic reconnection with exponential backoff (1s→30s)
+- Handle ENOTCONN socket errors properly in send/receive tasks
+- Enhance LED feedback: orange=reconnecting, red=lost, green=connected
+- Prevent duplicate reconnection attempts with task tracking
+- Re-query locomotives after successful reconnection
+- Update protocol monitor to work with auto-reconnect system
+
+Fixes connection recovery issue when WiFi drops or Rocrail disconnects

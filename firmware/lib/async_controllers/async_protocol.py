@@ -108,6 +108,48 @@ class AsyncRocrailProtocol:
                    self.reader is not None and
                    hasattr(self.writer, 'write'))
             
+            
+    async def _auto_reconnect(self):
+        """Automatic reconnection with exponential backoff"""
+        retry_delays = [1, 2, 5, 10, 30]  # Seconds between attempts
+        attempt = 0
+        
+        while True:
+            if await self.is_connected():
+                print("Already connected, stopping auto-reconnect")
+                break
+                
+            delay = retry_delays[min(attempt, len(retry_delays)-1)]
+            print(f"Auto-reconnect in {delay}s (attempt {attempt+1})")
+            await self.state.set_rocrail_status("reconnecting")
+            
+            await asyncio.sleep(delay)
+            
+            try:
+                # Clean up old connection first
+                await self.disconnect()
+                await asyncio.sleep(0.5)
+                
+                # Try to reconnect
+                if await self.connect(self.host, self.port):
+                    print("✓ Auto-reconnect successful")
+                    
+                    # Re-query locomotives if needed
+                    if not self.locomotives_loaded:
+                        await asyncio.sleep(1)
+                        await self.query_locomotives()
+                    
+                    break  # Success, exit loop
+                else:
+                    print(f"Auto-reconnect attempt {attempt+1} failed")
+                    attempt += 1
+                    
+            except Exception as e:
+                print(f"Auto-reconnect error: {e}")
+                attempt += 1
+                
+        print("Auto-reconnect task ended")
+            
     async def reconnect(self, max_attempts=5):
         """Attempt to reconnect to RocRail"""
         if not self.host or not self.port:
@@ -139,18 +181,38 @@ class AsyncRocrailProtocol:
         try:
             while True:
                 if not self.reader:
-                    break
+                    await asyncio.sleep(1)
+                    continue
                     
-                # Read data from socket
-                data = await self.reader.read(4096)
-                if not data:
-                    print("RocRail server closed connection")
-                    await self.state.set_rocrail_status("lost")
-                    break
+                try:
+                    # Read data from socket with timeout
+                    data = await self.reader.read(4096)
+                    if not data:
+                        print("RocRail server closed connection")
+                        await self.state.set_rocrail_status("lost")
+                        await self.disconnect()
+                        # Trigger reconnection
+                        if not self.reconnect_task or self.reconnect_task.done():
+                            self.reconnect_task = asyncio.create_task(self._auto_reconnect())
+                        break
+                        
+                    # Process received data
+                    await self._handle_received_data(data)
                     
-                # Process received data
-                await self._handle_received_data(data)
-                
+                except OSError as e:
+                    # Handle socket errors
+                    if "[Errno 128]" in str(e) or "ENOTCONN" in str(e):
+                        print(f"Receive connection lost: {e}")
+                        await self.state.set_rocrail_status("lost")
+                        await self.disconnect()
+                        # Trigger reconnection
+                        if not self.reconnect_task or self.reconnect_task.done():
+                            self.reconnect_task = asyncio.create_task(self._auto_reconnect())
+                        break
+                    else:
+                        print(f"Receive error: {e}")
+                        await asyncio.sleep(0.5)
+                        
         except Exception as e:
             print(f"Receive task error: {e}")
             await self.state.set_rocrail_status("lost")
@@ -176,6 +238,10 @@ class AsyncRocrailProtocol:
                     
                     if not self.writer or not hasattr(self.writer, 'write'):
                         print("Cannot send - no connection")
+                        await self.state.set_rocrail_status("lost")
+                        # Trigger reconnection
+                        if not self.reconnect_task or self.reconnect_task.done():
+                            self.reconnect_task = asyncio.create_task(self._auto_reconnect())
                         continue
                         
                     try:
@@ -191,6 +257,19 @@ class AsyncRocrailProtocol:
                         if await self.state.get_rocrail_status() != "connected":
                             await self.state.set_rocrail_status("connected")
                             
+                    except OSError as e:
+                        # Handle specific socket errors
+                        if "[Errno 128]" in str(e) or "ENOTCONN" in str(e):
+                            print(f"Connection lost: {e}")
+                            await self.state.set_rocrail_status("lost")
+                            # Close the broken connection
+                            await self.disconnect()
+                            # Trigger immediate reconnection
+                            if not self.reconnect_task or self.reconnect_task.done():
+                                self.reconnect_task = asyncio.create_task(self._auto_reconnect())
+                        else:
+                            print(f"Send error: {e}")
+                            await self.state.set_rocrail_status("error")
                     except Exception as e:
                         print(f"Send error: {e}")
                         await self.state.set_rocrail_status("lost")
