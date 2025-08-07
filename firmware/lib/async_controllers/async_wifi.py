@@ -61,10 +61,11 @@ class AsyncWiFiManager:
                 # Start connection
                 self.wlan.connect(ssid, password)
                 
-                # Wait for connection with timeout
-                start_time = time.time()
+                # Wait for connection with timeout - MicroPython compatible
+                start_time = time.ticks_ms()
+                timeout_ms = timeout_seconds * 1000
                 while not self.wlan.isconnected():
-                    if time.time() - start_time > timeout_seconds:
+                    if time.ticks_diff(time.ticks_ms(), start_time) > timeout_ms:
                         print("WiFi connection timeout")
                         await self.state.set_wifi_status("failed")
                         return False

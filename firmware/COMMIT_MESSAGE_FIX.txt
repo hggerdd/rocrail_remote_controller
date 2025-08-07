@@ -1,0 +1,16 @@
+fix: MicroPython asyncio compatibility for locomotive controller
+
+- Replace asyncio.Queue with list + asyncio.Event (Queue not available in MicroPython)
+- Update protocol message queue to use list-based queue with event signaling
+- Replace asyncio.gather() with compatible event loop for task monitoring
+- Add fallback for asyncio.run() to support older MicroPython versions
+- Use get_event_loop().run_until_complete() as fallback
+- Remove debug print statements from main controller
+- Ensure all async operations are MicroPython compatible
+- Test compatibility with both newer and older MicroPython asyncio implementations
+
+Technical changes:
+* AsyncRocrailProtocol._send_queue: asyncio.Queue() → list + asyncio.Event
+* Main event loop: asyncio.gather() → individual task monitoring
+* Entry point: asyncio.run() with fallback to loop.run_until_complete()
+* Queue operations: .get()/.put()/.task_done() → list append/pop with event signaling

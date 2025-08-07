@@ -1,0 +1,17 @@
+fix: MicroPython asyncio StreamWriter compatibility issues
+
+- Fix 'Stream' object has no attribute 'is_closing' error
+- Replace writer.is_closing() with hasattr(writer, 'write') checks
+- Add compatibility wrapper for writer.wait_closed() method
+- Add fallback for asyncio.wait_for() if not available in MicroPython
+- Use try/except for optional stream methods to prevent crashes
+- All stream operations now compatible with MicroPython asyncio implementation
+
+Technical fixes:
+* is_connected(): writer.is_closing() → hasattr(writer, 'write')
+* disconnect(): wait_closed() wrapped in hasattr() check
+* connect(): wait_for() with fallback for MicroPython
+* get_connection_info(): updated connection check logic
+* All stream methods now gracefully handle MicroPython limitations
+
+This resolves the "Protocol monitor error" during controller startup.

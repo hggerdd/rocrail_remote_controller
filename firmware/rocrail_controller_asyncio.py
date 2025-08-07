@@ -308,9 +308,31 @@ class LocomotiveControllerAsync:
             # Start all tasks
             await self.start_tasks()
             
-            # Run main event loop
+            # Run main event loop - wait for all tasks
             print("Starting main event loop...")
-            await asyncio.gather(*self.tasks)
+            
+            # MicroPython compatible - wait for tasks individually
+            while self.tasks:
+                try:
+                    # Wait for any task to complete (shouldn't happen in normal operation)
+                    await asyncio.sleep(1)
+                    
+                    # Check if any tasks have failed
+                    failed_tasks = []
+                    for task in self.tasks:
+                        if task.done():
+                            failed_tasks.append(task)
+                    
+                    if failed_tasks:
+                        print(f"Tasks completed/failed: {len(failed_tasks)}")
+                        for task in failed_tasks:
+                            self.tasks.remove(task)
+                            if task.exception():
+                                print(f"Task error: {task.exception()}")
+                                
+                except Exception as e:
+                    print(f"Event loop error: {e}")
+                    break
             
         except KeyboardInterrupt:
             print("Program interrupted")
@@ -345,6 +367,19 @@ async def main():
     controller = LocomotiveControllerAsync()
     await controller.run()
 
-# Run the async controller
+# Run the async controller - MicroPython compatible
+def run_controller():
+    """Run the controller with MicroPython compatible asyncio"""
+    try:
+        # Try asyncio.run() first (newer MicroPython)
+        if hasattr(asyncio, 'run'):
+            asyncio.run(main())
+        else:
+            # Fall back to event loop method (older MicroPython)
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(main())
+    except Exception as e:
+        print(f"Error running controller: {e}")
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_controller()

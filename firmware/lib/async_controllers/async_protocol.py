@@ -31,7 +31,8 @@ class AsyncRocrailProtocol:
         
         # Async synchronization
         self._protocol_lock = asyncio.Lock()
-        self._send_queue = asyncio.Queue()
+        self._send_queue = []  # Simple list for MicroPython compatibility
+        self._queue_event = asyncio.Event()  # Signal when queue has items
         
         # Connection monitoring
         self.last_activity_time = 0
@@ -48,11 +49,16 @@ class AsyncRocrailProtocol:
             try:
                 print(f"Connecting to RocRail: {host}:{port}")
                 
-                # Create connection with timeout
-                self.reader, self.writer = await asyncio.wait_for(
-                    asyncio.open_connection(host, port),
-                    timeout=timeout
-                )
+                # Create connection with timeout - MicroPython compatible
+                if hasattr(asyncio, 'wait_for'):
+                    # Standard asyncio with timeout
+                    self.reader, self.writer = await asyncio.wait_for(
+                        asyncio.open_connection(host, port),
+                        timeout=timeout
+                    )
+                else:
+                    # Fallback for MicroPython without wait_for
+                    self.reader, self.writer = await asyncio.open_connection(host, port)
                 
                 print("✓ RocRail connected")
                 await self.state.set_rocrail_status("connected")
@@ -78,7 +84,12 @@ class AsyncRocrailProtocol:
             try:
                 if self.writer:
                     self.writer.close()
-                    await self.writer.wait_closed()
+                    # MicroPython compatible - wait_closed may not exist
+                    if hasattr(self.writer, 'wait_closed'):
+                        try:
+                            await self.writer.wait_closed()
+                        except:
+                            pass  # Ignore errors in wait_closed
                     
                 self.reader = None
                 self.writer = None
@@ -92,7 +103,10 @@ class AsyncRocrailProtocol:
     async def is_connected(self):
         """Check if connected to RocRail"""
         async with self._protocol_lock:
-            return self.writer is not None and not self.writer.is_closing()
+            # MicroPython compatible connection check
+            return (self.writer is not None and 
+                   self.reader is not None and
+                   hasattr(self.writer, 'write'))
             
     async def reconnect(self, max_attempts=5):
         """Attempt to reconnect to RocRail"""
@@ -149,32 +163,37 @@ class AsyncRocrailProtocol:
         
         try:
             while True:
-                # Wait for message to send
-                message = await self._send_queue.get()
+                # Wait for message to be available in queue
+                await self._queue_event.wait()
                 
-                if not self.writer or self.writer.is_closing():
-                    print("Cannot send - no connection")
-                    continue
+                # Process all queued messages
+                while True:
+                    async with self._protocol_lock:
+                        if not self._send_queue:
+                            self._queue_event.clear()
+                            break
+                        message = self._send_queue.pop(0)
                     
-                try:
-                    # Send message
-                    self.writer.write(message)
-                    await self.writer.drain()
-                    
-                    # Update activity time
-                    import time
-                    self.last_activity_time = time.ticks_ms()
-                    
-                    # Ensure connection status is correct
-                    if await self.state.get_rocrail_status() != "connected":
-                        await self.state.set_rocrail_status("connected")
+                    if not self.writer or not hasattr(self.writer, 'write'):
+                        print("Cannot send - no connection")
+                        continue
                         
-                except Exception as e:
-                    print(f"Send error: {e}")
-                    await self.state.set_rocrail_status("lost")
-                    
-                # Mark task as done
-                self._send_queue.task_done()
+                    try:
+                        # Send message
+                        self.writer.write(message)
+                        await self.writer.drain()
+                        
+                        # Update activity time
+                        import time
+                        self.last_activity_time = time.ticks_ms()
+                        
+                        # Ensure connection status is correct
+                        if await self.state.get_rocrail_status() != "connected":
+                            await self.state.set_rocrail_status("connected")
+                            
+                    except Exception as e:
+                        print(f"Send error: {e}")
+                        await self.state.set_rocrail_status("lost")
                 
         except Exception as e:
             print(f"Send task error: {e}")
@@ -245,8 +264,10 @@ class AsyncRocrailProtocol:
             message_len = len(message)
             full_message = f'<xmlh><xml size="{message_len}"/></xmlh>{message}'
             
-            # Queue for sending
-            await self._send_queue.put(full_message.encode())
+            # Queue for sending using list and event
+            async with self._protocol_lock:
+                self._send_queue.append(full_message.encode())
+                self._queue_event.set()
             
             return True
             
@@ -284,7 +305,11 @@ class AsyncRocrailProtocol:
             message_len = len(message)
             full_message = f'<xmlh><xml size="{message_len}" name="model"/></xmlh>{message}'
             
-            await self._send_queue.put(full_message.encode())
+            # Queue for sending using list and event
+            async with self._protocol_lock:
+                self._send_queue.append(full_message.encode())
+                self._queue_event.set()
+            
             print("Locomotive query sent")
             return True
             
@@ -297,7 +322,9 @@ class AsyncRocrailProtocol:
         """Get connection information"""
         async with self._protocol_lock:
             return {
-                'connected': self.writer is not None and not self.writer.is_closing(),
+                'connected': (self.writer is not None and 
+                             self.reader is not None and
+                             hasattr(self.writer, 'write')),
                 'host': self.host,
                 'port': self.port,
                 'locomotives_loaded': self.locomotives_loaded,

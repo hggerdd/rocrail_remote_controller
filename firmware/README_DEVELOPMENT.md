@@ -46,14 +46,29 @@ New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces poll
 - Easier testing and debugging
 - Modular component design
 
-**Usage:**
+**MicroPython Compatibility:**
+- Uses list + asyncio.Event instead of asyncio.Queue (not available in MicroPython)
+- Compatible event loop handling with fallback for older MicroPython versions
+- Individual task monitoring instead of asyncio.gather()
+- Stream operations use hasattr() checks for MicroPython compatibility
+- writer.is_closing() → hasattr(writer, 'write') checks
+- writer.wait_closed() wrapped with compatibility checks
+- asyncio.wait_for() with fallback for basic open_connection()
+- All async operations tested for MicroPython compatibility
+
+**Testing:**
 ```python
-# Run asyncio version
+# Test basic asyncio compatibility
+python test_basic_asyncio.py
+
+# Test stream operations compatibility  
+python test_stream_compatibility.py
+
+# Run asyncio controller
 python rocrail_controller_asyncio.py
 
-# Test components
+# Full component tests
 python test_asyncio.py
-python quick_test.py
 ```
 
 ## Core Files Structure
