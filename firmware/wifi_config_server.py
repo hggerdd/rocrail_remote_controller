@@ -497,51 +497,89 @@ class WiFiConfigAPI:
             return False
     
     def load_rocrail_config(self):
-        """Load Rocrail server configuration - CACHED"""
+        """Load Rocrail server configuration from config.py - CACHED"""
         import time
         current_time = time.time()
-        
+
         # Use cache if less than 10 seconds old
         if self._rocrail_cache and (current_time - self._rocrail_cache_time) < 10:
             return self._rocrail_cache
-        
+
+        ip = ""
+        port = 8051  # Default port
         try:
-            with open("rocrail_config.txt", "r") as f:
-                lines = f.readlines()
-                if len(lines) >= 2:
-                    ip = lines[0].strip()
-                    port = lines[1].strip()
-                    try:
-                        port = int(port)
-                    except:
-                        self._log_error(f"Invalid Rocrail port in config: {port}, using default 8051")
-                        port = 8051  # Default Rocrail port
-                    
-                    result = (ip, port)
-                    self._rocrail_cache = result
-                    self._rocrail_cache_time = current_time
-                    return result
+            with open("config.py", "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("ROCRAIL_HOST"):
+                        # Extract value between quotes
+                        parts = line.split("=", 1)
+                        if len(parts) == 2:
+                            ip_val = parts[1].strip()
+                            if ip_val.startswith('"') and ip_val.endswith('"'):
+                                ip = ip_val[1:-1]
+                            elif ip_val.startswith("'") and ip_val.endswith("'"):
+                                ip = ip_val[1:-1]
+                            else:
+                                ip = ip_val
+                    elif line.startswith("ROCRAIL_PORT"):
+                        parts = line.split("=", 1)
+                        if len(parts) == 2:
+                            try:
+                                port = int(parts[1].strip())
+                            except:
+                                port = 8051
+            result = (ip, port)
+            self._rocrail_cache = result
+            self._rocrail_cache_time = current_time
+            return result
         except Exception as e:
-            self._log_error("Failed to load Rocrail configuration - using defaults", e)
-        
+            self._log_error("Failed to load Rocrail configuration from config.py - using defaults", e)
+
         result = ("", 8051)  # Default values
         self._rocrail_cache = result
         self._rocrail_cache_time = current_time
         return result
     
     def save_rocrail_config(self, ip, port):
-        """Save Rocrail server configuration"""
+        """Save Rocrail server configuration to config.py by updating ROCRAIL_HOST and ROCRAIL_PORT"""
         try:
-            with open("rocrail_config.txt", "w") as f:
-                f.write(f"{ip}\n{port}\n")
-            
+            config_path = "config.py"
+            with open(config_path, "r") as f:
+                lines = f.readlines()
+            new_lines = []
+            found_host = False
+            found_port = False
+            for line in lines:
+                if line.strip().startswith("ROCRAIL_HOST"):
+                    new_lines.append(f'ROCRAIL_HOST = "{ip}"\n')
+                    found_host = True
+                    print(f"[save_rocrail_config] Updated ROCRAIL_HOST to '{ip}'")
+                elif line.strip().startswith("ROCRAIL_PORT"):
+                    new_lines.append(f'ROCRAIL_PORT = {port}\n')
+                    found_port = True
+                    print(f"[save_rocrail_config] Updated ROCRAIL_PORT to {port}")
+                else:
+                    new_lines.append(line)
+            if not found_host or not found_port:
+                msg = "[save_rocrail_config] ERROR: ROCRAIL_HOST or ROCRAIL_PORT not found in config.py"
+                print(msg)
+                self._log_error(msg)
+                self.leds.error_status(True)
+                return False
+            with open(config_path, "w") as f:
+                f.write("".join(new_lines))
+            print("[save_rocrail_config] config.py written successfully.")
+
             # Invalidate cache
             self._rocrail_cache = None
             self._rocrail_cache_time = 0
-            
+
+            self.leds.error_status(False)
             return True
         except Exception as e:
             self._log_error("Failed to save Rocrail configuration - check filesystem permissions", e)
+            self.leds.error_status(True)
             return False
     
     def test_connection(self, ssid, password):

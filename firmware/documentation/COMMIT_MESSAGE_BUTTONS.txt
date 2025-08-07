@@ -1,0 +1,32 @@
+fix: Button functionality in AsyncIO hardware controller
+
+Fixed non-working buttons in asyncio implementation:
+
+1. **Simplified button debouncing logic**:
+   - Removed complex state tracking with multiple negations
+   - Clear button press detection: transition from 1→0 (pull-up logic)
+   - Proper state initialization with actual pin values
+
+2. **Reduced debounce time**:
+   - 50ms → 20ms for more responsive button feel
+   - Maintains debouncing while improving responsiveness
+
+3. **Added debug output**:
+   - Button press detection now logged for debugging
+   - Clear indication when buttons are recognized
+
+4. **Fixed state tracking**:
+   - _last_button_states stores actual pin values (0/1)
+   - _last_button_times tracks timing for debouncing
+   - Proper state updates on value changes
+
+5. **Test utilities**:
+   - test_raw_buttons.py - Raw pin value monitoring
+   - test_minimal_buttons.py - AsyncHardwareManager testing
+   - test_buttons_asyncio.py - Complete button functionality test
+
+Technical fix: The original debouncing logic had multiple negations and complex state 
+tracking that prevented proper button press detection. New logic directly compares 
+pin values and detects the 1→0 transition that indicates a button press with pull-up resistors.
+
+Usage: Run test_minimal_buttons.py to verify button functionality before using full controller.

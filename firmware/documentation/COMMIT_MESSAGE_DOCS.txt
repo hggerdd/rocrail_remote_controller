@@ -1,0 +1,28 @@
+docs: Document AsyncIO compatibility issues and prevention strategies
+
+Added comprehensive documentation for MicroPython asyncio issues encountered and resolved:
+
+**Issues Documented:**
+1. `asyncio.Queue` not available → list + asyncio.Event solution
+2. `'Stream' object has no attribute 'is_closing'` → hasattr() checks  
+3. `writer.wait_closed()` compatibility → hasattr() wrapper
+4. Button functionality → simplified debouncing logic
+5. Potentiometer calibration → proper mechanical range mapping
+6. Event loop compatibility → asyncio.run() fallback
+7. Time function optimization → ticks_ms() usage
+
+**Documentation Added:**
+- README_DEVELOPMENT.md: Common pitfalls and solutions section
+- README_DEVELOPMENT.md: Complete failure log with root causes and fixes
+- MICROPYTHON_ASYNCIO_CHECKLIST.md: Comprehensive compatibility checklist
+- Pre-implementation checklist to prevent these issues
+- Testing protocol with specific test commands
+- Error pattern examples with correct implementations
+- Troubleshooting quick reference guide
+
+**Prevention Strategy:**
+Future asyncio implementations can use this documentation to avoid the same
+compatibility issues. Includes specific test commands to validate compatibility
+before deployment.
+
+Resolves: Prevent future asyncio compatibility failures, improve development workflow

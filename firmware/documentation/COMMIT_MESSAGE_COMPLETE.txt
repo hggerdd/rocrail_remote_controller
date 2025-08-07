@@ -1,0 +1,33 @@
+fix: Complete MicroPython asyncio compatibility for locomotive controller
+
+Fixed multiple MicroPython asyncio incompatibilities:
+
+1. **Queue replacement**: asyncio.Queue → list + asyncio.Event
+   - Message queuing now uses list with event signaling
+   - Compatible with all MicroPython asyncio implementations
+
+2. **Stream object compatibility**: 
+   - writer.is_closing() → hasattr(writer, 'write') checks
+   - writer.wait_closed() wrapped with hasattr() and try/except
+   - get_connection_info() updated for stream compatibility
+
+3. **Connection handling**:
+   - asyncio.wait_for() with fallback to basic open_connection()
+   - Graceful handling of missing stream methods
+   - Robust disconnect with optional method checks
+
+4. **Time functions**:
+   - time.time() → time.ticks_ms() for MicroPython efficiency
+   - WiFi timeout uses ticks_diff() for accurate timing
+
+5. **Event loop compatibility**:
+   - asyncio.gather() → individual task monitoring
+   - asyncio.run() with fallback to get_event_loop()
+
+6. **Comprehensive testing**:
+   - test_basic_asyncio.py - Basic feature validation
+   - test_stream_compatibility.py - Stream operations test
+   - test_full_compatibility.py - Complete compatibility validation
+
+Resolves: "Queue" error and "'Stream' object has no attribute 'is_closing'" error
+All async operations now compatible with MicroPython asyncio limitations.

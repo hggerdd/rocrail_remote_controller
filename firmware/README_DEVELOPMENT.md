@@ -4,9 +4,209 @@
 
 MicroPython ESP32 locomotive controller for Rocrail model railway systems. Battery-powered handheld device with 10 status LEDs, potentiometer speed control, and multiple buttons.
 
+**MAJOR UPDATE: AsyncIO Implementation**
+New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces polling-based architecture with event-driven async tasks. Better resource utilization, structured concurrency, eliminates global variables.
+
 **Operating Modes:**
 - **Configuration Mode**: Web server for WiFi/Rocrail setup (red button at boot)
 - **Controller Mode**: Active locomotive control (default)
+
+## Architecture Versions
+
+### Legacy Implementation (`rocrail_controller.py`)
+- Polling-based main loop with IntervalTimer
+- Thread-based socket communication
+- Global variables and shared state
+- ~320 lines with modular design
+
+### AsyncIO Implementation (`rocrail_controller_asyncio.py`)
+- Event-driven async tasks
+- AsyncIO socket communication
+- Lock/Queue-based state management
+- Structured concurrency with proper resource cleanup
+- Eliminates timer-based polling loops
+
+## AsyncIO Implementation Issues Resolved
+
+**Critical Failures Encountered & Fixed:**
+
+1. **`Error running main rocrail_controller.py: Queue`**
+   - **Cause**: `asyncio.Queue` not available in MicroPython asyncio
+   - **Solution**: Replaced with `list + asyncio.Event` in `async_protocol.py`
+   - **Files**: `lib/async_controllers/async_protocol.py`
+
+2. **`'Stream' object has no attribute 'is_closing'`**
+   - **Cause**: MicroPython StreamWriter lacks `is_closing()` method
+   - **Solution**: Use `hasattr(writer, 'write')` for connection checks
+   - **Files**: `lib/async_controllers/async_protocol.py`
+
+3. **`StreamWriter.wait_closed()` compatibility**  
+   - **Cause**: Method may not exist in all MicroPython versions
+   - **Solution**: Wrapped with `hasattr()` check and try/except
+   - **Files**: `lib/async_controllers/async_protocol.py`
+
+4. **Buttons not working**
+   - **Cause**: Over-complex debouncing logic with multiple negations
+   - **Solution**: Simplified to direct 1→0 transition detection (pull-up)  
+   - **Files**: `lib/async_controllers/async_hardware.py`
+
+5. **Potentiometer limited range**
+   - **Cause**: Missing mechanical calibration (1310-2360 → 0-100 mapping)
+   - **Solution**: Added `_normalize_speed()` with proper calibration
+   - **Files**: `lib/async_controllers/async_hardware.py`
+
+6. **Event loop compatibility**
+   - **Cause**: `asyncio.run()` not available in older MicroPython
+   - **Solution**: Fallback to `get_event_loop().run_until_complete()`
+   - **Files**: `rocrail_controller_asyncio.py`
+
+7. **Time function compatibility**
+   - **Cause**: `time.time()` less precise than MicroPython alternatives
+   - **Solution**: Use `time.ticks_ms()` and `time.ticks_diff()`
+   - **Files**: `lib/async_controllers/async_wifi.py`
+
+**Prevention**: Run `python test_full_compatibility.py` before deployment to catch these issues early.
+
+## AsyncIO Benefits
+
+**Structured Concurrency:**
+- Replace timer loops with async tasks
+- Proper resource management and cleanup
+- Better error handling and recovery
+- Event-driven instead of polling
+
+**Resource Optimization:**
+- Single event loop instead of multiple threads
+- Reduced memory overhead
+- Better CPU utilization
+- Cleaner state management with locks/queues
+
+**Maintainability:**
+- No global variables - state managed by async primitives
+- Clear task separation and responsibilities  
+- Easier testing and debugging
+- Modular component design
+
+**MicroPython AsyncIO Compatibility Issues & Solutions:**
+
+⚠️ **Common AsyncIO Pitfalls** - Issues encountered and solved in this implementation:
+
+1. **`asyncio.Queue` not available** → Use `list + asyncio.Event`
+   ```python
+   # ❌ Fails in MicroPython
+   queue = asyncio.Queue()
+   
+   # ✅ MicroPython compatible
+   queue = []
+   queue_event = asyncio.Event()
+   ```
+
+
+
+9. **Boot LED indicators with asyncio** ✅ **RESOLVED**
+   - **Cause**: AsyncNeoPixelController requires event loop, not available in boot.py
+   - **Solution**: Direct NeoPixel control in boot.py before asyncio initialization
+   - **Files**: `boot.py`
+   - **Indicators**: Orange (boot), Purple (config mode), Green (normal operation)
+
+10. **AsyncIO LED startup delay** ✅ **RESOLVED** 
+   - **Cause**: LED update task waited for complete initialization before starting
+   - **Solution**: LED task starts immediately after hardware init, during WiFi/RocRail connection
+   - **Files**: `rocrail_controller_asyncio.py`, `async_leds.py`
+   - **Result**: Instant LED feedback during connection attempts, no more ~30s delay
+   - **Architecture**: LED task launches in `initialize()` before network connections
+2. **`writer.is_closing()` method missing** → Use `hasattr()` checks
+   ```python
+   # ❌ Fails: 'Stream' object has no attribute 'is_closing'
+   if not writer.is_closing():
+   
+   # ✅ MicroPython compatible  
+   if writer and hasattr(writer, 'write'):
+   ```
+
+3. **`writer.wait_closed()` may not exist** → Wrap with compatibility check
+   ```python
+   # ✅ Safe approach
+   if hasattr(writer, 'wait_closed'):
+       try:
+           await writer.wait_closed()
+       except:
+           pass
+   ```
+
+4. **`asyncio.wait_for()` missing** → Add fallback
+   ```python
+   # ✅ With fallback
+   if hasattr(asyncio, 'wait_for'):
+       result = await asyncio.wait_for(operation(), timeout=10)
+   else:
+       result = await operation()  # No timeout
+   ```
+
+5. **`asyncio.gather()` unreliable** → Use individual task monitoring
+   ```python
+   # ❌ May fail with long-running tasks
+   await asyncio.gather(*tasks)
+   
+   # ✅ Individual monitoring
+   while tasks:
+       await asyncio.sleep(1)
+       # Check and handle completed tasks
+   ```
+
+6. **`asyncio.run()` not available** → Event loop fallback
+   ```python
+   # ✅ Compatible approach
+   if hasattr(asyncio, 'run'):
+       asyncio.run(main())
+   else:
+       loop = asyncio.get_event_loop()
+       loop.run_until_complete(main())
+   ```
+
+7. **Complex button debouncing fails** → Simplify logic
+   ```python
+   # ✅ Direct transition detection (pull-up)
+   if last_state == 1 and current_state == 0:
+       return True  # Button pressed
+   ```
+
+8. **Missing hardware calibration** → Always migrate hardware-specific code
+   - Potentiometer ranges, LED brightness, timing constants
+   - Don't assume linear mappings work for all hardware
+
+**Testing Strategy**: Always test with actual MicroPython before deployment:
+```bash
+python test_full_compatibility.py  # Comprehensive compatibility check
+```
+
+**📋 For Future AsyncIO Development**: 
+- `MICROPYTHON_ASYNCIO_CHECKLIST.md` - Complete compatibility checklist
+- `ASYNCIO_ISSUES_RESOLVED.md` - Summary of all issues fixed
+- Use these guides to prevent the same compatibility issues in future implementations
+
+**Testing:**
+```python
+# Test basic asyncio compatibility
+python test_basic_asyncio.py
+
+# Test stream operations compatibility  
+python test_stream_compatibility.py
+
+# Test button functionality
+python test_raw_buttons.py         # Raw pin monitoring
+python test_minimal_buttons.py     # AsyncIO hardware manager test
+python test_buttons_asyncio.py     # Full button test with poti
+
+# Test potentiometer calibration
+python test_poti_calibration.py    # Potentiometer range and calibration
+
+# Run asyncio controller
+python rocrail_controller_asyncio.py
+
+# Full component tests
+python test_asyncio.py
+```
 
 ## Core Files Structure
 
@@ -72,6 +272,12 @@ BTN_MITTE_UP = 18         # Black up - next locomotive
 BTN_MITTE_DOWN = 21       # Black down - previous locomotive
 ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 ```
+
+### Potentiometer Calibration
+**Physical Range Limitation**: Due to mechanical constraints, the potentiometer cannot use the full ADC range (0-4095).
+**Calibrated Range**: 1310-2360 (from adc_test.py measurements)
+**Output Mapping**: Calibrated range mapped to 0-100 locomotive speed
+**Testing**: Use `python test_poti_calibration.py` to verify calibration accuracy
 
 ## Communication Protocol
 

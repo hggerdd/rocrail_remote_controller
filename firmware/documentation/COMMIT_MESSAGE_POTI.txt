@@ -1,0 +1,30 @@
+fix: Add potentiometer calibration to AsyncIO hardware controller
+
+Added missing potentiometer normalization from legacy controller:
+
+1. **Potentiometer Calibration**:
+   - POTI_MIN_VALUE = 1310 (minimum mechanical range)
+   - POTI_MAX_VALUE = 2360 (maximum mechanical range)
+   - Maps calibrated range to 0-100 locomotive speed
+
+2. **Normalization Method**:
+   - _normalize_speed() handles raw ADC to speed conversion
+   - Proper clamping for values outside calibrated range
+   - Maintains filtering with normalized values
+
+3. **Enhanced Functionality**:
+   - get_raw_adc() for debugging and calibration verification
+   - get_poti_calibration() returns calibration parameters
+   - Updated speed filtering to use normalized values
+
+4. **Test Utilities**:
+   - test_poti_calibration.py - Real-time calibration testing
+   - Updated test_buttons_asyncio.py to show raw ADC values
+   - Range verification and calibration validation
+
+Technical: The AsyncIO implementation was missing the mechanical potentiometer
+limitations that require mapping the limited physical range (1310-2360) to the
+full locomotive speed range (0-100). This ensures consistent speed control
+across the full mechanical range of the potentiometer.
+
+Resolves: Potentiometer only working in limited range, inconsistent speed mapping
