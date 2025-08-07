@@ -26,15 +26,22 @@ class AsyncNeoPixelController:
         self.neo = None
         self.enabled = False
         
-        # LED brightness levels
-        self.LED_BRIGHT = 255
-        self.LED_DIM_HIGH = 50
-        self.LED_DIM_LOW = 20
+        # LED brightness levels - optimized for AsyncIO
+        self.LED_BRIGHT = 200   # Reduced from 255 for better visibility and battery life
+        self.LED_DIM_HIGH = 60  # Increased from 50 for better dim state visibility  
+        self.LED_DIM_LOW = 15   # Reduced from 20 for better bright/dim contrast
+        self.LED_DIM_MIN = 5    # New minimum level for subtle effects
         self.LED_OFF = 0
         
-        # Blinking state
+        # Blinking state with different speeds for different urgency
         self._blink_state = False
+        self._fast_blink_state = False  # For critical states
         self._last_blink_time = 0
+        self._last_fast_blink_time = 0
+        
+        # Blinking intervals - optimized for AsyncIO
+        self.BLINK_INTERVAL_NORMAL = 500  # ms - normal blinking (current default)
+        self.BLINK_INTERVAL_FAST = 300    # ms - faster blinking for critical states
         
         # Async synchronization
         self._led_lock = asyncio.Lock()
@@ -97,27 +104,34 @@ class AsyncNeoPixelController:
                 pass  # Silent error handling
                 
     async def _update_blink_state(self):
-        """Update global blink state"""
+        """Update global blink states (normal and fast)"""
         current_time = time.ticks_ms()
-        if time.ticks_diff(current_time, self._last_blink_time) >= NEOPIXEL_BLINK_INTERVAL:
+        
+        # Normal blink state
+        if time.ticks_diff(current_time, self._last_blink_time) >= self.BLINK_INTERVAL_NORMAL:
             self._blink_state = not self._blink_state
             self._last_blink_time = current_time
             
+        # Fast blink state for critical statuses
+        if time.ticks_diff(current_time, self._last_fast_blink_time) >= self.BLINK_INTERVAL_FAST:
+            self._fast_blink_state = not self._fast_blink_state
+            self._last_fast_blink_time = current_time
+            
     async def update_wifi_status(self, status):
-        """Update WiFi status LED"""
+        """Update WiFi status LED with optimized brightness"""
         await self._update_blink_state()
         
         if status == "connected":
-            # Green with dim/bright pulsing
+            # Green with improved dim/bright pulsing
             brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_HIGH
             color = (0, brightness, 0)
         elif status == "connecting":
-            # Orange blinking
+            # Orange blinking with better contrast
             brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_LOW
             color = (brightness, brightness//2, 0)
         elif status == "failed":
-            # Red blinking
-            brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_LOW
+            # Red blinking with subtle minimum
+            brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_MIN
             color = (brightness, 0, 0)
         else:
             # Off for initial/unknown states
@@ -126,19 +140,19 @@ class AsyncNeoPixelController:
         await self._set_led(LED_WIFI, color)
         
     async def update_rocrail_status(self, status):
-        """Update RocRail status LED"""
+        """Update RocRail status LED with optimized brightness and timing"""
         await self._update_blink_state()
         
         if status == "connected":
             # Solid green
             color = (0, self.LED_BRIGHT, 0)
         elif status == "connecting":
-            # Orange blinking
+            # Orange normal blinking
             brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_LOW
             color = (brightness, brightness//2, 0)
         elif status == "reconnecting":
-            # Red-orange fast blinking
-            brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_LOW
+            # Red-orange FAST blinking for urgency
+            brightness = self.LED_BRIGHT if self._fast_blink_state else self.LED_DIM_MIN
             color = (brightness, brightness//3, 0)
         elif status == "lost":
             # Solid red
@@ -161,11 +175,11 @@ class AsyncNeoPixelController:
             await self._set_led(LED_DIR_RIGHT, (self.LED_BRIGHT, self.LED_BRIGHT, 0))
             
     async def update_speed_warning(self, warning_active):
-        """Update speed warning LED (poti zero required)"""
+        """Update speed warning LED with optimized brightness (poti zero required)"""
         if warning_active:
             await self._update_blink_state()
-            # Purple blinking when poti zero required
-            brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_LOW
+            # Purple blinking with better contrast when poti zero required
+            brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_MIN
             color = (brightness//2, 0, brightness)
         else:
             # Off when normal operation

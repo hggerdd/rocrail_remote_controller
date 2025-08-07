@@ -115,6 +115,13 @@ New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces poll
    - **Files**: `rocrail_controller_asyncio.py`, `async_leds.py`
    - **Result**: Instant LED feedback during connection attempts, no more ~30s delay
    - **Architecture**: LED task launches in `initialize()` before network connections
+
+11. **AsyncIO LED optimization** ✅ **IMPLEMENTED**
+   - **Need**: AsyncIO event-driven updates require different LED brightness/timing than polling
+   - **Solution**: Implemented LED_RECOMMENDATIONS.py suggestions for better visibility
+   - **Files**: `lib/async_controllers/async_leds.py`, `documentation/LED_RECOMMENDATIONS.py`
+   - **Changes**: Reduced brightness (255→200), improved dim levels, multi-speed blinking
+   - **Benefits**: Better battery life, improved contrast, urgency-based blink speeds
 2. **`writer.is_closing()` method missing** → Use `hasattr()` checks
    ```python
    # ❌ Fails: 'Stream' object has no attribute 'is_closing'
@@ -238,7 +245,7 @@ python test_asyncio.py
 - **LED 4**: No text - Activity indicator
 - **LEDs 5-9**: Numbers "1-5" - Locomotive selection
 
-### LED Status Logic
+**LED Status Logic** - Optimized for AsyncIO implementation:
 ```python
 # LED assignments from hardware_config.py
 LED_WIFI = 0          # WiFi status
@@ -249,17 +256,21 @@ LED_ACTIVITY = 4      # Activity indicator
 LED_LOCO_START = 5    # First locomotive (LEDs 5-9)
 ```
 
-**LED 0 (WiFi)**: Green (bright/dim pulse when connected), Orange (bright/dim blink when connecting), Red (bright/dim blink when failed)
-**LED 1 (RocRail)**: Solid green (connected), Orange bright/dim blink (connecting), Red-orange fast bright/dim (reconnecting), Solid red (lost)
+**LED 0 (WiFi)**: Green bright/dim pulse (connected), Orange bright/dim blink (connecting), Red bright/min blink (failed)
+**LED 1 (RocRail)**: Solid green (connected), Orange bright/dim blink (connecting), Red-orange FAST bright/min blink (reconnecting), Solid red (lost)
 **LEDs 2-3 (Direction)**: Bright yellow for active direction, off for inactive
-**LED 4 (Activity)**: Purple bright/dim blink when poti zero required, off when normal
+**LED 4 (Activity)**: Purple bright/min blink when poti zero required, off when normal
 **LEDs 5-9 (Locos)**: Bright blue for selected locomotive, off for others (energy saving)
 
-**Brightness Levels** (configurable in `lib/neopixel_controller.py`):
-- `LED_BRIGHT = 255` - Full brightness for active/on states
-- `LED_DIM_HIGH = 50` - Medium dim for connected states  
-- `LED_DIM_LOW = 20` - Low dim for "off" phase of blinking
-- `LED_DIM_MIN = 10` - Minimum brightness (currently unused)
+**AsyncIO-Optimized Brightness Levels** (in `lib/async_controllers/async_leds.py`):
+- `LED_BRIGHT = 200` - Reduced from 255 for better visibility and battery life
+- `LED_DIM_HIGH = 60` - Increased from 50 for better dim state visibility  
+- `LED_DIM_LOW = 15` - Reduced from 20 for better bright/dim contrast
+- `LED_DIM_MIN = 5` - New minimum level for subtle effects (failed states)
+
+**Multi-Speed Blinking**:
+- Normal blink (500ms): Connected states, normal operations
+- Fast blink (300ms): Critical states like "reconnecting" for urgency
 
 ### Button Configuration
 ```python
