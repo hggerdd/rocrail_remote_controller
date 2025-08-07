@@ -67,7 +67,10 @@ python test_stream_compatibility.py
 # Test button functionality
 python test_raw_buttons.py         # Raw pin monitoring
 python test_minimal_buttons.py     # AsyncIO hardware manager test
-python test_buttons_asyncio.py     # Full button test
+python test_buttons_asyncio.py     # Full button test with poti
+
+# Test potentiometer calibration
+python test_poti_calibration.py    # Potentiometer range and calibration
 
 # Run asyncio controller
 python rocrail_controller_asyncio.py
@@ -140,6 +143,12 @@ BTN_MITTE_UP = 18         # Black up - next locomotive
 BTN_MITTE_DOWN = 21       # Black down - previous locomotive
 ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 ```
+
+### Potentiometer Calibration
+**Physical Range Limitation**: Due to mechanical constraints, the potentiometer cannot use the full ADC range (0-4095).
+**Calibrated Range**: 1310-2360 (from adc_test.py measurements)
+**Output Mapping**: Calibrated range mapped to 0-126 locomotive speed
+**Testing**: Use `python test_poti_calibration.py` to verify calibration accuracy
 
 ## Communication Protocol
 

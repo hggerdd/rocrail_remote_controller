@@ -56,10 +56,14 @@ async def test_buttons():
                     button_display = button_names.get(button_key, button_key.upper())
                     print(f"🔘 {button_display} PRESSED!")
                     
-            # Show speed changes
+            # Show speed changes with calibration info
             speed = inputs['speed']
             if abs(speed - last_speed) > 2:  # Only show significant changes
-                print(f"🎛️  Speed: {speed}")
+                # Get raw ADC for debugging
+                raw_adc = await hardware.get_raw_adc()
+                calibration = hardware.get_poti_calibration()
+                
+                print(f"🎛️  Speed: {speed} (Raw: {raw_adc}, Range: {calibration['min_value']}-{calibration['max_value']})")
                 last_speed = speed
                 
             # Small delay

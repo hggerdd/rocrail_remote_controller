@@ -24,6 +24,10 @@ class AsyncHardwareManager:
         self._last_button_states = {}
         self._last_button_times = {}
         
+        # Potentiometer calibration (from adc_test.py)
+        self.POTI_MIN_VALUE = 1310  # Minimum mechanical poti value
+        self.POTI_MAX_VALUE = 2360  # Maximum mechanical poti value
+        
         # Speed filtering
         self._speed_samples = []
         self._speed_filter_size = 5
@@ -56,10 +60,10 @@ class AsyncHardwareManager:
             self.speed_adc = ADC(Pin(ADC_GESCHWINDIGKEIT))
             self.speed_adc.atten(ADC.ATTN_11DB)
             
-            # Initialize speed filter
+            # Initialize speed filter with normalized values
             for _ in range(self._speed_filter_size):
                 raw_value = self.speed_adc.read()
-                speed = int((raw_value / 4095.0) * 126)
+                speed = self._normalize_speed(raw_value)
                 self._speed_samples.append(speed)
                 
             print("✓ Async hardware initialized")
@@ -97,12 +101,28 @@ class AsyncHardwareManager:
             
         return False
         
+    def _normalize_speed(self, raw_value):
+        """Normalize potentiometer raw value to 0-126 speed range"""
+        # Apply calibrated range from adc_test.py
+        if raw_value <= self.POTI_MIN_VALUE:
+            normalized = 0
+        elif raw_value >= self.POTI_MAX_VALUE:
+            normalized = 126  # Maximum locomotive speed
+        else:
+            # Map calibrated range to 0-126
+            ratio = (raw_value - self.POTI_MIN_VALUE) / (self.POTI_MAX_VALUE - self.POTI_MIN_VALUE)
+            normalized = int(ratio * 126)
+            
+        return max(0, min(126, normalized))
+        
     async def _read_speed_filtered(self):
-        """Read speed potentiometer with filtering"""
+        """Read speed potentiometer with filtering and calibration"""
         try:
             # Read raw ADC value
             raw_value = self.speed_adc.read()
-            speed = int((raw_value / 4095.0) * 126)
+            
+            # Apply calibrated normalization
+            speed = self._normalize_speed(raw_value)
             
             # Update sliding window filter
             self._speed_samples.append(speed)
@@ -156,3 +176,19 @@ class AsyncHardwareManager:
         """Get current filtered speed value"""
         async with self._hardware_lock:
             return await self._read_speed_filtered()
+            
+    async def get_raw_adc(self):
+        """Get raw ADC value for debugging"""
+        try:
+            return self.speed_adc.read()
+        except Exception as e:
+            print(f"Raw ADC read error: {e}")
+            return 0
+            
+    def get_poti_calibration(self):
+        """Get potentiometer calibration values"""
+        return {
+            'min_value': self.POTI_MIN_VALUE,
+            'max_value': self.POTI_MAX_VALUE,
+            'range': self.POTI_MAX_VALUE - self.POTI_MIN_VALUE
+        }
