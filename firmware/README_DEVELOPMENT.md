@@ -64,6 +64,11 @@ python test_basic_asyncio.py
 # Test stream operations compatibility  
 python test_stream_compatibility.py
 
+# Test button functionality
+python test_raw_buttons.py         # Raw pin monitoring
+python test_minimal_buttons.py     # AsyncIO hardware manager test
+python test_buttons_asyncio.py     # Full button test
+
 # Run asyncio controller
 python rocrail_controller_asyncio.py
 

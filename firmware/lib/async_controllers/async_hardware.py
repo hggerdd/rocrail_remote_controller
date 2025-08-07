@@ -20,8 +20,8 @@ class AsyncHardwareManager:
         self.buttons = {}
         self.speed_adc = None
         
-        # Button debouncing state
-        self._button_states = {}
+        # Button debouncing state - simplified
+        self._last_button_states = {}
         self._last_button_times = {}
         
         # Speed filtering
@@ -47,10 +47,10 @@ class AsyncHardwareManager:
                 'btn_down': Pin(BTN_MITTE_DOWN, Pin.IN, Pin.PULL_UP)
             }
             
-            # Initialize button states
+            # Initialize button states - simplified
             for name in self.buttons:
-                self._button_states[name] = True  # Pull-up = True when not pressed
-                self._last_button_times[name] = 0
+                self._last_button_states[name] = self.buttons[name].value()  # Store actual pin value
+                self._last_button_times[name] = time.ticks_ms()
                 
             # Initialize speed potentiometer
             self.speed_adc = ADC(Pin(ADC_GESCHWINDIGKEIT))
@@ -69,26 +69,32 @@ class AsyncHardwareManager:
             print(f"Hardware initialization error: {e}")
             return False
             
-    async def _read_button_debounced(self, name, debounce_ms=50):
-        """Read button with debouncing"""
+    async def _read_button_debounced(self, name, debounce_ms=20):
+        """Read button with simple debouncing - returns True on button press"""
         if name not in self.buttons:
             return False
             
         current_time = time.ticks_ms()
-        current_state = not self.buttons[name].value()  # Invert for pull-up
+        current_value = self.buttons[name].value()  # 0 = pressed (pull-up), 1 = not pressed
         
-        # Check for state change
-        if current_state != (not self._button_states[name]):
-            self._last_button_times[name] = current_time
-            self._button_states[name] = not current_state
+        # Check if enough time has passed since last state change
+        time_since_last = time.ticks_diff(current_time, self._last_button_times[name])
+        if time_since_last < debounce_ms:
             return False
             
-        # Check if debounce time has passed
-        if time.ticks_diff(current_time, self._last_button_times[name]) >= debounce_ms:
-            if current_state and not (not self._button_states[name]):
-                self._button_states[name] = not current_state
-                return True  # Button press detected
-                
+        # Check for button press (transition from 1 to 0 for pull-up)
+        if self._last_button_states[name] == 1 and current_value == 0:
+            # Button was just pressed
+            self._last_button_states[name] = current_value
+            self._last_button_times[name] = current_time
+            print(f"[BUTTON] {name} press detected!")  # Debug output
+            return True
+            
+        # Update state if it changed
+        if self._last_button_states[name] != current_value:
+            self._last_button_states[name] = current_value
+            self._last_button_times[name] = current_time
+            
         return False
         
     async def _read_speed_filtered(self):
