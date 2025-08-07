@@ -105,7 +105,7 @@ class RocrailProtocol:
     def _cleanup_socket(self):
         """Clean up socket connection safely"""
         if not self._acquire_socket_lock():
-            print("Could not acquire socket lock for cleanup")
+            print("Socket lock fail")
             return
             
         try:
@@ -113,49 +113,45 @@ class RocrailProtocol:
                 try:
                     self.socket_client.close()
                 except:
-                    pass  # Ignore cleanup errors
+                    pass
                 self.socket_client = None
                 
-            # Force garbage collection after socket cleanup
             try:
                 import gc
                 gc.collect()
             except:
                 pass
                 
-            # Give system time to recover
             time.sleep(0.1)
                 
         except Exception as e:
-            print(f"Error during socket cleanup: {e}")
+            print(f"Socket cleanup err: {e}")
         finally:
             self._release_socket_lock()
     
     def _start_reconnect_thread(self):
         """Start automatic reconnection thread"""
-        # Don't start reconnect during initial connection phase
         if not self.reconnect_enabled:
-            print("Reconnect not enabled yet - skipping auto-reconnect")
+            print("Recon not enabled")
             return
             
-        # Prevent multiple reconnect threads
         if self.reconnect_running:
-            print("Reconnect thread already running - skipping")
+            print("Recon already run")
             return
             
         if not self.host or not self.port:
-            print("No host/port configured for reconnect")
+            print("No host/port")
             return
             
-        print("Starting reconnect thread...")
+        print("Start recon thread...")
         self.reconnect_running = True
         self.reconnect_attempts = 0
         
         try:
             _thread.start_new_thread(self._reconnect_loop, ())
-            print("Reconnect thread started successfully")
+            print("Recon thread OK")
         except OSError as e:
-            print(f"Failed to start reconnect thread: {e}")
+            print(f"Recon thread fail: {e}")
             self.reconnect_running = False
     
     def _reconnect_loop(self):
@@ -170,37 +166,30 @@ class RocrailProtocol:
                 else:
                     delay = RECONNECT_DELAY_SLOW
                 
-                # Always wait before retry (even first attempt)
-                print(f"Reconnect attempt {self.reconnect_attempts + 1} in {delay}ms...")
+                print(f"Recon #{self.reconnect_attempts + 1} in {delay}ms...")
                 time.sleep(delay / 1000.0)
                 
-                # Check if we should still continue
                 if not self.reconnect_running:
-                    print("Reconnect cancelled")
+                    print("Recon cancel")
                     break
                 
-                # Update status to reconnecting
                 self.rocrail_status = "reconnecting"
                 self.reconnect_attempts += 1
                 
-                # Attempt reconnection
-                print(f"Reconnecting to {self.host}:{self.port} (attempt {self.reconnect_attempts})...")
+                print(f"RR recon→{self.host}:{self.port} (#{self.reconnect_attempts})")
                 
-                # Clean up old connection with pause
                 self._cleanup_socket()
-                time.sleep(0.5)  # Give system time to recover
+                time.sleep(0.5)
                 
-                # Try to establish new connection
                 if self._attempt_connection():
-                    print(f"Reconnection successful after {self.reconnect_attempts} attempts!")
-                    # Reset and exit loop
+                    print(f"Recon OK after {self.reconnect_attempts} tries!")
                     self.reconnect_attempts = 0
                     
-                    # Restart locomotive query after reconnection
-                    if not self.locomotives_loaded:
-                        print("Restarting locomotive query after reconnection...")
-                        time.sleep(1.0)  # Longer delay before querying
-                        self.query_locomotives()
+                # Restart locomotive query after reconnection
+                if not self.locomotives_loaded:
+                    print("Requery locos after recon...")
+                    time.sleep(1.0)
+                    self.query_locomotives()
                     
                     # Successfully connected - exit loop
                     break
@@ -227,34 +216,27 @@ class RocrailProtocol:
         """Attempt to establish socket connection"""
         try:
             if not self._acquire_socket_lock():
-                print("Could not acquire lock for connection attempt")
+                print("Lock fail")
                 return False
                 
-            # Create new socket WITHOUT timeout for normal operation
             self.socket_client = socket.socket()
-            # Do NOT set timeout: self.socket_client.settimeout(SOCKET_TIMEOUT)
-            
-            # Connect to server
-            print(f"Attempting connection to {self.host}:{self.port}...")
+            print(f"Try→{self.host}:{self.port}")
             self.socket_client.connect((self.host, self.port))
             
-            # Connection successful
             self.rocrail_status = "connected"
             self.last_rocrail_activity_time = time.ticks_ms()
             self.last_rocrail_send_success = True
             self.running = True
             
-            # Brief pause before starting listener
             time.sleep(0.2)
             
-            # Start listener thread
             _thread.start_new_thread(self.socket_listener, ())
             
-            print("Connection successful!")
+            print("Conn✓")
             return True
             
         except Exception as e:
-            print(f"Connection attempt failed: {e}")
+            print(f"Conn fail: {e}")
             self.rocrail_status = "lost"
             if self.socket_client:
                 try:
@@ -269,93 +251,77 @@ class RocrailProtocol:
     
     def socket_listener(self):
         """Background thread for listening to socket data"""
-        print("Socket listener started")
+        print("Socket listener OK")
         
-        receive_buffer_size = 4096  # min 4096 required for robust work
+        receive_buffer_size = 4096
         consecutive_errors = 0
         
         while self.running:
             try:
                 data = self.socket_client.recv(receive_buffer_size)
                 if data:
-                    consecutive_errors = 0  # Reset error counter on successful receive
+                    consecutive_errors = 0
                     if self.data_callback:
                         self.data_callback(data)
                 else:
-                    print("Connection closed by server")
+                    print("Server closed conn")
                     self.rocrail_status = "lost"
-                    # Only start reconnect if not already running
                     if not self.reconnect_running:
                         self._start_reconnect_thread()
                     break
             except OSError as e:
-                # Network-related errors
                 consecutive_errors += 1
-                if consecutive_errors > 10:  # Back to original threshold
-                    print(f"Socket listener: Too many consecutive errors ({consecutive_errors}), starting reconnect")
+                if consecutive_errors > 10:
+                    print(f"Socket err#{consecutive_errors}→recon")
                     self.rocrail_status = "lost"
-                    # Only start reconnect if not already running
                     if not self.reconnect_running:
                         self._start_reconnect_thread()
                     break
-                time.sleep(0.01)  # Back to original timing
+                time.sleep(0.01)
                 continue
             except Exception as e:
-                # Other errors - log and continue
                 consecutive_errors += 1
-                if consecutive_errors <= 3:  # Only log first few errors to avoid spam
-                    print(f"Socket listener error: {e}")
-                if consecutive_errors > 20:  # Back to original threshold
-                    print(f"Socket listener: Critical error count ({consecutive_errors}), starting reconnect")
+                if consecutive_errors <= 3:
+                    print(f"Socket ex: {e}")
+                if consecutive_errors > 20:
+                    print(f"Critical err#{consecutive_errors}→recon")
                     self.rocrail_status = "lost"
-                    # Only start reconnect if not already running
                     if not self.reconnect_running:
                         self._start_reconnect_thread()
                     break
-                time.sleep(0.01)  # Back to original timing
+                time.sleep(0.01)
                 continue
         
-        print("Socket listener stopped")
+        print("Socket listener stop")
         self.running = False
     
     def start_connection(self, host, port, callback_function):
         """
         Start a socket connection and monitor it in background
-        
-        Args:
-            host: Server hostname or IP
-            port: Server port
-            callback_function: Function to call when data is received
         """
-        # Store connection parameters for reconnection
         self.host = host
         self.port = port
         self.data_callback = callback_function
-        
-        # Set connecting status
         self.rocrail_status = "connecting"
         
         try:
-            # Create socket (simple MicroPython way - like original)
             self.socket_client = socket.socket()
-            print(f"Connecting to {host}:{port}...")
+            print(f"RR conn→{host}:{port}")
             self.socket_client.connect((host, port))
             
-            # Connection successful
             self.rocrail_status = "connected"
             self.last_rocrail_activity_time = time.ticks_ms()
             self.last_rocrail_send_success = True
             self.running = True
             self.connection_established_time = time.ticks_ms()
             
-            # Start listener thread
             _thread.start_new_thread(self.socket_listener, ())
             
-            print(f"Connected to server {host}:{port}")
+            print(f"RR conn OK")
             return True
             
         except Exception as e:
-            print(f"Connection error: {e}")
+            print(f"RR conn err: {e}")
             self.rocrail_status = "lost"
             if self.socket_client:
                 try:
@@ -363,8 +329,7 @@ class RocrailProtocol:
                 except:
                     pass
                 self.socket_client = None
-            # NO auto-reconnect on initial connection failure
-            print("Initial connection failed - no auto-reconnect during startup")
+            print("Init conn fail→no auto-recon")
             return False
     
     def stop_connection(self):
@@ -388,123 +353,99 @@ class RocrailProtocol:
     
     def handle_data(self, data):
         """Process received data from RocRail server"""
-        # Update last activity time (data received)
         self.last_rocrail_activity_time = time.ticks_ms()
         
-        # If we receive data, connection is definitely working - restore status if lost
         if self.rocrail_status == "lost":
             self.rocrail_status = "connected"
-            print("RocRail connection restored - data received")
+            print("RR conn restored")
         elif self.rocrail_status != "connected":
             self.rocrail_status = "connected"
         
-        # Simple decode without keyword arguments for MicroPython compatibility
         try:
             data_str = data.decode('utf-8')
         except:
-            data_str = str(data)  # Fallback if decode fails
+            data_str = str(data)
         
-        # Safety check: Reject abnormally large data packets to prevent memory issues
-        if len(data_str) > 8192:  # More than 8KB in single packet is suspicious
-            print(f"[MEMORY] WARNING: Rejecting large data packet ({len(data_str)} bytes) to prevent memory issues")
+        if len(data_str) > 8192:
+            print(f"[MEM] Large pkt rejected: {len(data_str)}B")
             return
         
-        # Debug: Print received data (only if still loading)
         if not self.locomotives_loaded:
-            debug_print(f"Received data ({len(data_str)} chars): {data_str[:200]}...")
+            debug_print(f"RX {len(data_str)}B")
         
-        # Memory management: If locomotives are already loaded, we don't need to buffer status updates
         if self.locomotives_loaded:
-            # Just process for connection monitoring, don't accumulate in buffer
-            # Status updates like <lc id="BR103" V="68" dir="true"...> are not needed
-            if len(self.xml_buffer) > 1024:  # Keep small buffer for connection monitoring
+            if len(self.xml_buffer) > 1024:
                 self.xml_buffer = ""
             return
         
-        # Accumulate XML data in buffer ONLY if still loading locomotives
         self.xml_buffer += data_str
         
-        # Debug: Print current buffer state
-        debug_print(f"XML buffer size: {len(self.xml_buffer)}, locomotives_loaded: {self.locomotives_loaded}")
+        debug_print(f"Buf: {len(self.xml_buffer)}B")
         
-        # Check memory usage and log warnings
         try:
             import gc
             gc.collect()
             free_mem = gc.mem_free()
-            if free_mem < 20000:  # Less than 20KB free memory
-                debug_print(f"⚠️  LOW MEMORY WARNING: {free_mem} bytes free")
+            if free_mem < 20000:
+                debug_print(f"⚠️ MEM: {free_mem}B")
         except:
             pass
         
-        # Process locomotive data if we haven't loaded locomotives yet
-        debug_print("Processing locomotive data...")
+        debug_print("Parse locos...")
         
-        # Check for complete locomotive list response - this is the main strategy
         if '<lclist>' in self.xml_buffer and '</lclist>' in self.xml_buffer:
-            debug_print("Found complete lclist structure in buffer, attempting intelligent parsing...")
+            debug_print("Found lclist→parse")
             if self.loco_list.update_from_rocrail_response(self.xml_buffer):
-                debug_print("✅ Successfully parsed locomotive data from RocRail!")
-                # Call display update callback if provided
+                debug_print("✅ Locos parsed!")
                 if self.display_update_callback:
-                    debug_print("Calling display update callback...")
+                    debug_print("Update display...")
                     self.display_update_callback()
                 else:
-                    debug_print("WARNING: No display update callback set!")
+                    debug_print("No display callback!")
                 self.locomotive_query_pending = False
                 self.locomotive_query_start_time = 0
-                self.locomotives_loaded = True  # Stop further locomotive queries
+                self.locomotives_loaded = True
                 
-                # Enable reconnect after successful locomotive loading
                 self.reconnect_enabled = True
-                print("System stable - reconnect logic enabled")
+                print("System stable→recon enabled")
                 
-                # Clear buffer after successful parsing to free memory
                 self.xml_buffer = ""
-                debug_print("✅ Locomotive loading completed successfully - buffer cleared")
-                # Disable debug output to save memory
+                debug_print("✅ Locos loaded")
                 global DEBUG_LOCOMOTIVE_LOADING
                 DEBUG_LOCOMOTIVE_LOADING = False
-                print("[MEMORY] Locomotive loading complete - disabled debug output to save memory")
-                # Force garbage collection after locomotive loading
+                print("[MEM] Debug off")
                 try:
                     import gc
                     gc.collect()
-                    print(f"[MEMORY] Memory after locomotive loading: {gc.mem_free()} bytes free")
+                    print(f"[MEM] {gc.mem_free()}B free")
                 except:
                     pass
             else:
-                debug_print("❌ Failed to parse locomotive data from complete lclist")
+                debug_print("❌ Parse fail")
         
-        # Check for partial locomotive data - wait for more
         elif '<lclist>' in self.xml_buffer and '</lclist>' not in self.xml_buffer:
-            debug_print("📄 Found start of lclist but no end tag yet - waiting for more data")
+            debug_print("📄 Partial lclist...")
         elif '<lclist>' not in self.xml_buffer and '</lclist>' in self.xml_buffer:
-            debug_print("⚠️  Found end of lclist but no start tag - buffer was truncated, data may be lost")
+            debug_print("⚠️ Truncated lclist")
         else:
-            debug_print("🔍 No complete locomotive data found in buffer yet")
+            debug_print("🔍 No lclist yet")
         
-        # Aggressive buffer management during locomotive loading
-        if len(self.xml_buffer) > 16384:  # 16KB limit (reduced from 24KB)
-            # Find the start of lclist and preserve it
+        if len(self.xml_buffer) > 16384:
             lclist_start = self.xml_buffer.find('<lclist>')
             if lclist_start != -1:
-                # Keep from lclist start onwards, but limit to 8KB
                 preserved_data = self.xml_buffer[lclist_start:]
                 if len(preserved_data) > 8192:
                     preserved_data = preserved_data[:8192]
                 self.xml_buffer = preserved_data
-                debug_print(f"XML buffer truncated but preserved lclist start ({len(preserved_data)} bytes)")
+                debug_print(f"Buf truncate, kept {len(preserved_data)}B")
             else:
-                # No lclist start found - keep last 4KB as safety net
                 self.xml_buffer = self.xml_buffer[-4096:]
-                debug_print("XML buffer truncated - kept last 4KB for safety")
+                debug_print("Buf truncate→4KB")
             
-            # Force garbage collection after buffer truncation
             try:
                 import gc
                 gc.collect()
-                debug_print(f"Memory after buffer truncation: {gc.mem_free()} bytes free")
+                debug_print(f"MEM after trunc: {gc.mem_free()}B")
             except:
                 pass
     

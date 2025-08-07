@@ -34,10 +34,8 @@ btn_down = ButtonController(pin_num=BTN_MITTE_DOWN, debounce_ms=5)
 
 # Initialize NeoPixel controller
 neopixel_ctrl = NeoPixelController(pin_num=NEOPIXEL_PIN, num_leds=NEOPIXEL_COUNT)
-if neopixel_ctrl.is_enabled():
-    print("[STARTUP] NeoPixel controller ready")
-else:
-    print("[STARTUP] NeoPixel disabled - continuing without LEDs")
+if not neopixel_ctrl.is_enabled():
+    print("[!] NeoPixel disabled")
 
 def update_locomotive_display():
     """Update NeoPixel display to show current locomotive selection"""
@@ -45,119 +43,98 @@ def update_locomotive_display():
     total_locos = loco_list.get_count()
     if neopixel_ctrl.is_enabled():
         neopixel_ctrl.update_locomotive_display(selected_index, total_locos)
-    print(loco_list.get_status_string())
 
 # Initialize protocol and state management
-print("[LOCO_DEBUG] Initializing RocrailProtocol with locomotive list and display callback...")
 rocrail_protocol = RocrailProtocol(loco_list, update_locomotive_display)
 state_machine = ControllerStateMachine()
-print(f"[LOCO_DEBUG] RocrailProtocol initialized - callback set: {rocrail_protocol.display_update_callback is not None}")
 
 # Set initial LED states
 if neopixel_ctrl.is_enabled():
     neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status())
     neopixel_ctrl.rocrail_status_led(rocrail_protocol.get_status())
     neopixel_ctrl.clear_locomotive_display()
-    print("[STARTUP] Initial LED states set")
 
 def reset_wifi_interface():
     """Reset WiFi interface to recover from internal errors"""
     global wlan
     
     try:
-        print("Resetting WiFi interface...")
+        print("WiFi reset...")
         if wlan:
             wlan.disconnect()
             wlan.active(False)
-            time.sleep(1)  # Wait for cleanup
+            time.sleep(1)
         
         wlan = network.WLAN(network.STA_IF)
         wlan.active(True)
-        time.sleep(0.5)  # Wait for activation
-        print("WiFi interface reset complete")
+        time.sleep(0.5)
+        print("WiFi reset OK")
         return True
     except Exception as e:
-        print(f"WiFi interface reset failed: {e}")
+        print(f"WiFi reset fail: {e}")
         return False
 
 def connect_wifi(ssid, password, state_machine, max_retries=10):
     global wlan
     
-    # Set connecting status
     state_machine.set_wifi_status("connecting")
     
-    # Create WLAN interface if not exists
     if wlan is None:
         wlan = network.WLAN(network.STA_IF)
     
     try:
-        # Activate the interface
         wlan.active(True)
-        time.sleep(0.2)  # Wait for activation
+        time.sleep(0.1)
         
-        # Check if already connected
         if wlan.isconnected():
-            print("Already connected to WiFi")
-            print("Network config:", wlan.ifconfig())
+            print(f"WiFi OK: {wlan.ifconfig()[0]}")
             state_machine.set_wifi_status("connected")
             return True
         
-        # Connect to WiFi with error handling
-        print(f"Connecting to {ssid}...")
+        print(f"WiFi→{ssid[:8]}...")
         try:
             wlan.connect(ssid, password)
         except Exception as e:
-            print(f"WiFi connect error: {e}")
-            # Try to reset interface and retry once
+            print(f"WiFi err: {e}")
             if reset_wifi_interface():
                 try:
                     wlan.connect(ssid, password)
-                except Exception as e2:
-                    print(f"WiFi connect retry failed: {e2}")
+                except:
                     state_machine.set_wifi_status("failed")
                     return False
             else:
                 state_machine.set_wifi_status("failed")
                 return False
         
-        # Wait for connection with timeout and blink LED
         retry_count = 0
         blink_toggle = False
         last_blink_time = time.ticks_ms()
-        last_retry_time = time.ticks_ms()
         
         while not wlan.isconnected() and retry_count < max_retries:
             current_time = time.ticks_ms()
             
-            # Blink the LED every 500ms during connection
             if time.ticks_diff(current_time, last_blink_time) >= NEOPIXEL_BLINK_INTERVAL:
                 blink_toggle = not blink_toggle
                 if neopixel_ctrl.is_enabled():
                     neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), blink_toggle)
                 last_blink_time = current_time
-            
-            # Check connection more frequently than before
-            time.sleep(0.1)
-            
-            # Increment retry counter every second
-            if time.ticks_diff(current_time, last_retry_time) >= 1000:
-                print("Waiting for connection...")
                 retry_count += 1
-                last_retry_time = current_time
+                if retry_count % 5 == 0:
+                    print(f"[{retry_count}]", end="")
+            
+            time.sleep(0.05)
         
-        # Check connection status
         if wlan.isconnected():
-            print("Connected to WiFi")
-            print("Network config:", wlan.ifconfig())
+            print(f"\n✓WiFi: {wlan.ifconfig()[0]}")
             state_machine.set_wifi_status("connected")
             return True
         else:
-            print("Failed to connect")
+            print("\n✗WiFi fail")
             state_machine.set_wifi_status("failed")
             return False
             
     except Exception as e:
-        print(f"WiFi connection error: {e}")
+        print(f"WiFi ex: {e}")
         state_machine.set_wifi_status("failed")
         return False
 
@@ -165,19 +142,17 @@ def reconnect_wifi(state_machine):
     """Robust WiFi reconnection with interface reset if needed"""
     global wlan
     
-    print("WiFi reconnection starting...")
+    print("WiFi recon...")
     
-    # First try simple reconnection
     if connect_wifi(WIFI_SSID, WIFI_PASSWORD, state_machine, max_retries=3):
         return True
     
-    # If that fails, reset interface and try again
-    print("Simple reconnection failed, resetting interface...")
+    print("Reset WiFi iface...")
     if reset_wifi_interface():
         if connect_wifi(WIFI_SSID, WIFI_PASSWORD, state_machine, max_retries=WIFI_RECONNECT_MAX_RETRIES):
             return True
     
-    print("WiFi reconnection failed after interface reset")
+    print("WiFi recon fail")
     return False
 
 def handle_locomotive_selection(state_machine, rocrail_protocol):
@@ -188,13 +163,11 @@ def handle_locomotive_selection(state_machine, rocrail_protocol):
     if btn_up.is_pressed():
         if loco_list.select_next():
             selection_changed = True
-            print("Selected next locomotive")
     
     # Handle DOWN button (previous locomotive)
     if btn_down.is_pressed():
         if loco_list.select_previous():
             selection_changed = True
-            print("Selected previous locomotive")
     
     # Update display if selection changed
     if selection_changed:
@@ -205,39 +178,33 @@ def handle_locomotive_selection(state_machine, rocrail_protocol):
         # Reset speed sending to ensure new locomotive starts safely
         state_machine.handle_locomotive_change()
         rocrail_protocol.send_speed_and_direction(0, loco_dir)
-        print("Locomotive changed - POTI ZERO REQUIRED (purple LED blinking)")
+        print(f"Loco: {loco_list.get_selected_id()}")
 
 def initialize_locomotive_list(rocrail_protocol):
     """Initialize locomotive list - load from file and query from RocRail for updates"""
     
     if loco_list.get_count() == 0:
-        # No locomotives loaded, add default
-        print("No saved locomotives - adding default and querying RocRail...")
+        print("No locos→add default+query RR...")
         loco_list.add_locomotive(DEFAULT_LOCO_ID)
         loco_list.save_to_file()
     else:
-        print(f"Loaded {loco_list.get_count()} locomotives from file")
+        print(f"Loaded {loco_list.get_count()} locos")
     
-    # Always query RocRail for latest locomotive list (don't set locomotives_loaded=True from file)
-    print("Querying RocRail for current locomotive list...")
+    print("Query RR locos...")
     rocrail_protocol.query_locomotives()
-    
-    # Update display with current locomotives (from file or default)
     update_locomotive_display()
 
 # Main program
 run = True
 if run:    
     # Connect to WiFi with robust reconnection
-    print("Starting WiFi connection...")
     if connect_wifi(WIFI_SSID, WIFI_PASSWORD, state_machine):
-        print("WiFi connection successful")
         
         # initialize the timer for regular events
         timer = IntervalTimer()
         
         # Connect to the rocrail server and start background monitoring
-        print("connect to " + ROCRAIL_HOST)
+        print(f"RR→{ROCRAIL_HOST}:{ROCRAIL_PORT}")
         if rocrail_protocol.start_connection(ROCRAIL_HOST, ROCRAIL_PORT, rocrail_protocol.handle_data):
             
             # Initialize locomotive list
@@ -246,12 +213,15 @@ if run:
             # Initialize direction indicator LEDs
             if neopixel_ctrl.is_enabled():
                 neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
-                print("[STARTUP] Direction LEDs initialized")
+                print("[INIT] LEDs ready")
             
-            # SIMPLE STARTUP STABILIZATION: Short delay for thread stabilization
-            print("System startup - waiting 3 seconds for socket stabilization...")
-            time.sleep(3.0)
-            print("Startup stabilization complete - system ready")
+            # STARTUP STABILIZATION with NeoPixel refresh
+            print("Startup stabilization...")
+            for i in range(10):  # 3 seconds with NeoPixel refresh every 100ms
+                time.sleep(0.1)
+                if i % 10 == 0 and neopixel_ctrl.is_enabled():
+                    neopixel_ctrl.refresh()  # Prevent early lockup
+            print("System ready!")
             
             # Initialise speed values
             last_speed = -1
@@ -272,45 +242,40 @@ if run:
                             print(f"[LOCO_DEBUG] Timeout after {LOCO_QUERY_TIMEOUT}ms, resetting query state")
                             rocrail_protocol.reset_query_state()
                     
-                    # Memory monitoring every 30 seconds
-                    if timer.is_ready("memory_check", 30000):
+                    # NeoPixel stability refresh (prevent lockups)
+                    if timer.is_ready("neopixel_refresh", 150):  # Every 2 seconds
+                        if neopixel_ctrl.is_enabled():
+                            neopixel_ctrl.refresh()
+                    
+                    # Memory monitoring every 60 seconds
+                    if timer.is_ready("memory_check", 60000):
                         try:
                             import gc
                             gc.collect()
                             free_mem = gc.mem_free()
-                            allocated_mem = gc.mem_alloc()
-                            print(f"[MEMORY] Free: {free_mem}B, Allocated: {allocated_mem}B")
-                            if free_mem < 15000:  # Critical memory warning
-                                print(f"[MEMORY] ⚠️  CRITICAL: Only {free_mem} bytes free!")
-                                # Force aggressive garbage collection
+                            if free_mem < 15000:
+                                print(f"[MEM] ⚠️ {free_mem}B")
                                 gc.collect()
-                                gc.collect()  # Double collection
-                        except Exception as e:
-                            print(f"[MEMORY] Error checking memory: {e}")
+                                gc.collect()
+                        except:
+                            pass
                     
                     if timer.is_ready("check_wifi_update", WIFI_CHECK_INTERVAL):
-                        print("check wifi connection")
                         try:
                             if not wlan or not wlan.isconnected():
-                                print("!!! wifi not connected --> reconnect")
-                                # Update status to show we're trying to reconnect
+                                print("WiFi lost→recon")
                                 if state_machine.get_wifi_status() != "connecting":
                                     state_machine.set_wifi_status("connecting")
-                                # Attempt robust reconnection
                                 if reconnect_wifi(state_machine):
-                                    print("WiFi reconnection successful")
+                                    print("WiFi✓")
                                 else:
-                                    print("WiFi reconnection failed - continuing with recovery mode")
                                     state_machine.set_wifi_status("failed")
                             else:
-                                # WiFi is connected, ensure status is correct
                                 if state_machine.get_wifi_status() != "connected":
                                     state_machine.set_wifi_status("connected")
-                                    print("WiFi status updated to connected")
                         except Exception as e:
-                            print(f"WiFi check error: {e}")
+                            print(f"WiFi ex: {e}")
                             state_machine.set_wifi_status("failed")
-                            # Try to reset interface for next check
                             reset_wifi_interface()
                     
                     # Update status LEDs with blinking effects
@@ -322,8 +287,6 @@ if run:
                             neopixel_ctrl.wifi_status_led(state_machine.get_wifi_status(), wifi_blink_toggle)
                             neopixel_ctrl.rocrail_status_led(rocrail_protocol.get_status(), rocrail_blink_toggle)
                             neopixel_ctrl.poti_zero_request_led(not state_machine.is_speed_sending_enabled(), wifi_blink_toggle)
-
-                        #neopixel_ctrl._write2()  # Write updated LED states
 
                     # Handle locomotive selection buttons
                     if timer.is_ready("check_loco_selection", BUTTON_CHECK_INTERVAL):
@@ -339,64 +302,53 @@ if run:
                     
                     # regularly update the poti/button input controller (required to have enough values for mean)
                     if timer.is_ready("send_poti_update", POTI_UPDATE_INTERVAL):
-                        if neopixel_ctrl.get_requested_update():
-                            neopixel_ctrl._write2()
                         try:
                             # update speed from poti position/angle
                             speed = speed_poti.read()
                             
-                            # check direction button(incl. debouncing),
-                            # toggle direction and set speed to 0,
-                            # disable speed sending until the
-                            # selection (poti) is set to speed 0
+                            # check direction button
                             if direction_button.is_pressed():
-                                print(f"[DEBUG] Direction button pressed")
                                 loco_dir = "true" if loco_dir == "false" else "false"
                                 rocrail_protocol.send_speed_and_direction(0, loco_dir)
                                 state_machine.handle_direction_change()
-                                # Update direction indicator LEDs
                                 if neopixel_ctrl.is_enabled():
                                     neopixel_ctrl.direction_indicator_leds(loco_dir == "true")
-                                print(f"Direction: {loco_dir} - POTI ZERO REQUIRED (purple LED blinking)")
+                                print(f"D:{loco_dir[0]}")
                                 
                             # check emergency button
                             if emergency_button.is_pressed():
-                                print(f"[DEBUG] Emergency button pressed")
                                 rocrail_protocol.send_speed_and_direction(0, loco_dir)
                                 state_machine.handle_emergency_stop()
-                                print("EMERGENCY STOP - POTI ZERO REQUIRED (purple LED blinking)")
+                                print("⚠STOP!")
                             
-                            # Light button pressed, toggle the light
+                            # Light button pressed
                             if light_button.is_pressed():
-                                print(f"[DEBUG] Light button pressed")
                                 loco_light = "true" if loco_light == "false" else "false"
                                 rocrail_protocol.send_light_command(loco_light)
-                                print(f"Light: {loco_light}")
+                                print(f"L:{loco_light[0]}")
                                 
                             # Sound button pressed
                             if sound_button.is_pressed():
-                                print(f"[DEBUG] Sound button pressed")
-                                print("Horn activated")
+                                print("🔊Horn")
                                 
                         except Exception as e:
                             print(f"[ERROR] Exception in poti/button handling: {e}")
                             import sys
                             sys.print_exception(e)
                 
-                    # every SPEED_UPDATE_INTERVAL check if speed has changed and can be updated (avoid too many commands)
                     if timer.is_ready("update_speed", SPEED_UPDATE_INTERVAL):
                         try:
                             if state_machine.is_speed_sending_enabled():
                                 if (speed != last_speed):
-                                    print(f"Speed: {speed} (enabled: {state_machine.is_speed_sending_enabled()})")
+                                    print(f"V:{speed}")
                                     rocrail_protocol.send_speed_and_direction(speed, loco_dir)
                                     last_speed = speed
                             else:
                                 state_machine.check_speed_enable_condition(speed)
                                 if state_machine.is_speed_sending_enabled():
-                                    print("Speed sending re-enabled - poti zero request cleared (purple LED off)")
+                                    print("V:enabled (poti=0)")
                         except Exception as e:
-                            print(f"[ERROR] Exception in speed handling: {e}")
+                            print(f"[ERR] Speed ex: {e}")
                             import sys
                             sys.print_exception(e)                       
                     
@@ -404,21 +356,17 @@ if run:
                     if rocrail_protocol.are_locomotives_loaded() and timer.is_ready("periodic_cleanup", 300000):
                         try:
                             import gc
-                            print("[CLEANUP] Performing periodic memory cleanup...")
-                            # Force garbage collection
+                            print("[GC]...")
                             gc.collect()
-                            gc.collect()  # Double collection for better results
+                            gc.collect()
                             free_mem = gc.mem_free()
-                            print(f"[CLEANUP] Memory after cleanup: {free_mem} bytes free")
+                            print(f"[GC] {free_mem}B free")
                         except Exception as e:
-                            print(f"[CLEANUP] Error during cleanup: {e}")
+                            print(f"[GC] err: {e}")
                     
-                    # Heartbeat every 5 seconds to show main loop is alive
-                    if timer.is_ready("heartbeat", 5000):
-                        wifi_status = state_machine.get_wifi_status()
-                        rocrail_status = rocrail_protocol.get_status()
-                        leds_enabled = neopixel_ctrl.is_enabled()
-                        print(f"[HEARTBEAT] WiFi:{wifi_status} RocRail:{rocrail_status} LEDs:{leds_enabled} Speed:{speed}")
+                    # Heartbeat every 30 seconds
+                    if timer.is_ready("heartbeat", 30000):
+                        print(f"[♥] W:{state_machine.get_wifi_status()[0]} R:{rocrail_protocol.get_status()[0]} V:{speed}")
                     
                     # Small delay to prevent CPU hogging
                     time.sleep(0.05)

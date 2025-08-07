@@ -121,6 +121,21 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 
 ## Common Issues & Solutions
 
+### Startup Lockup Fix (~50% failure rate)
+**Problem**: System hangs in ~50% of startups, especially in first 3 seconds
+**Solution**: 
+- Extended startup stabilization to 3 seconds with 100ms NeoPixel refresh intervals
+- Added periodic NeoPixel refresh every 2 seconds in main loop
+- _write2() method for alternative LED write without state change
+- refresh() method called periodically to prevent RMT lockups
+
+### WiFi Connection Delay
+**Problem**: Long delay between connection and green WiFi LED
+**Solution**:
+- Optimized serial output (compact messages, fewer characters)
+- Reduced verbose debug messages
+- Faster status updates with emoji/symbol indicators
+
 ### NeoPixel Simplified Design
 **Previous Issues**: Complex RMT error recovery caused code bloat
 **Current Solution**: Simplified controller with silent error handling
@@ -129,11 +144,14 @@ ADC_GESCHWINDIGKEIT = 34  # Speed potentiometer
 - **Reliable Operation**: Basic functionality prioritized
 - **Fast Response**: No delays or recovery attempts
 - **Fallback**: Controller continues if LEDs fail
+- **Stability Workaround**: Added _write2() and refresh() methods for periodic NeoPixel refresh
+- **Startup Protection**: 3-second stabilization with 100ms refresh intervals prevents early lockups
 
 **Hardware Notes**:
 - Uses pin 5 for NeoPixel data (10 LEDs)
 - Alternative pins if needed: 25, 26, 27
 - Disable with: `neopixel_ctrl.force_disable()`
+- Call `neopixel_ctrl.refresh()` every 2 seconds in main loop for stability
 
 ## Development Commands
 
@@ -169,14 +187,15 @@ Update `README_DEVELOPMENT.md` when:
 - Modular architecture: `RocrailProtocol` and `ControllerStateMachine` classes
 - **Robust auto-reconnection**: Fast retry logic, unlimited attempts
 - Main controller maintained at ~320 lines through modular design
-- **Simplified NeoPixel**: Clean, lean implementation without complex recovery
+- **Simplified NeoPixel**: Clean implementation with periodic refresh for stability
 - 10 LED system with physical labels, status visualization
 - RocRail connection tracking via send/receive monitoring  
 - Direction indicators synchronized with locomotive state
 - Energy-efficient locomotive display (only selected LED active)
 - Advanced WiFi management with interface reset capability
-- **Startup stabilization**: 3-second delay prevents race conditions
-- **Reliable LED control**: Simplified error handling for stability
+- **Startup stabilization**: 3-second delay with NeoPixel refresh prevents race conditions
+- **Reliable LED control**: Simplified error handling with periodic refresh for stability
+- **Compact debug output**: Minimized serial output for better performance
 
 Focus: `lib/protocol/rocrail_protocol.py` for communication, `lib/core/controller_state.py` for state management, `rocrail_controller.py` for orchestration.
 

@@ -36,24 +36,19 @@ class NeoPixelController:
             return
         try: 
             self.np.write()
-            #self.update_requested = True  # Mark that an update is requested
-            #pass
         except:
             pass  # Silently ignore write errors
-    
-    def get_requested_update(self):
-        """Check if an update is requested"""
-        return self.update_requested
     
     def _write2(self):
-        """Write to NeoPixel with minimal safety check"""
+        """Alternative write method for stability - call periodically"""
         if not self.enabled:
             return
-        try: 
-            #self.np.write()
-            self.update_requested = False
+        try:
+            # Force refresh without changing colors
+            self.np.write()
+            return True
         except:
-            pass  # Silently ignore write errors
+            return False
 
     def all_off(self):
         """Turn off all LEDs"""
@@ -178,6 +173,12 @@ class NeoPixelController:
         """Disable LED operations"""
         self.enabled = False
         print("[NEOPIXEL] Disabled")
+    
+    def refresh(self):
+        """Periodic refresh to prevent lockups - call every few seconds"""
+        if not self.enabled:
+            return False
+        return self._write2()
     
     def try_recovery(self):
         """Simple recovery attempt"""
