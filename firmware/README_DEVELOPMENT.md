@@ -4,9 +4,57 @@
 
 MicroPython ESP32 locomotive controller for Rocrail model railway systems. Battery-powered handheld device with 10 status LEDs, potentiometer speed control, and multiple buttons.
 
+**MAJOR UPDATE: AsyncIO Implementation**
+New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces polling-based architecture with event-driven async tasks. Better resource utilization, structured concurrency, eliminates global variables.
+
 **Operating Modes:**
 - **Configuration Mode**: Web server for WiFi/Rocrail setup (red button at boot)
 - **Controller Mode**: Active locomotive control (default)
+
+## Architecture Versions
+
+### Legacy Implementation (`rocrail_controller.py`)
+- Polling-based main loop with IntervalTimer
+- Thread-based socket communication
+- Global variables and shared state
+- ~320 lines with modular design
+
+### AsyncIO Implementation (`rocrail_controller_asyncio.py`)
+- Event-driven async tasks
+- AsyncIO socket communication
+- Lock/Queue-based state management
+- Structured concurrency with proper resource cleanup
+- Eliminates timer-based polling loops
+
+## AsyncIO Benefits
+
+**Structured Concurrency:**
+- Replace timer loops with async tasks
+- Proper resource management and cleanup
+- Better error handling and recovery
+- Event-driven instead of polling
+
+**Resource Optimization:**
+- Single event loop instead of multiple threads
+- Reduced memory overhead
+- Better CPU utilization
+- Cleaner state management with locks/queues
+
+**Maintainability:**
+- No global variables - state managed by async primitives
+- Clear task separation and responsibilities  
+- Easier testing and debugging
+- Modular component design
+
+**Usage:**
+```python
+# Run asyncio version
+python rocrail_controller_asyncio.py
+
+# Test components
+python test_asyncio.py
+python quick_test.py
+```
 
 ## Core Files Structure
 

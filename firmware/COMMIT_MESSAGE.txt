@@ -1,0 +1,17 @@
+feat: Implement AsyncIO-based locomotive controller
+
+- Refactor from polling-based to event-driven async architecture
+- Replace IntervalTimer loops with async tasks  
+- Use asyncio primitives (Lock, Queue, Event) instead of global variables
+- Create modular async components:
+  * async_state.py - State management with locks/events
+  * async_hardware.py - Hardware input handling
+  * async_wifi.py - WiFi connection management
+  * async_protocol.py - RocRail protocol communication  
+  * async_leds.py - LED status visualization
+- Better resource utilization and cleaner error handling
+- Structured concurrency with proper cleanup
+- Test suite for validation (test_asyncio.py, quick_test.py)
+- Update README with asyncio architecture documentation
+
+Breaking: New asyncio implementation alongside legacy version
