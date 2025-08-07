@@ -242,25 +242,28 @@ class LocomotiveControllerAsync:
         
         while True:
             try:
+                # Check connection status less frequently as auto-reconnect handles recovery
                 if not await self.protocol.is_connected():
-                    await self.state.set_rocrail_status("reconnecting")
-                    print("RocRail lost - reconnecting...")
+                    rocrail_status = await self.state.get_rocrail_status()
                     
-                    if await self.protocol.reconnect():
-                        await self.state.set_rocrail_status("connected")
-                        print("RocRail reconnected")
+                    # Only intervene if not already reconnecting
+                    if rocrail_status not in ["reconnecting", "connecting"]:
+                        print("RocRail connection check failed - triggering reconnect")
+                        await self.state.set_rocrail_status("reconnecting")
                         
-                        # Re-query locomotives after reconnection
-                        if not self.protocol.locomotives_loaded:
-                            await self.protocol.query_locomotives()
-                    else:
-                        await self.state.set_rocrail_status("failed")
+                        # Trigger reconnection if not already running
+                        if not self.protocol.reconnect_task or self.protocol.reconnect_task.done():
+                            self.protocol.reconnect_task = asyncio.create_task(self.protocol._auto_reconnect())
+                else:
+                    # Connection is good, ensure status is correct
+                    if await self.state.get_rocrail_status() not in ["connected", "connecting"]:
+                        await self.state.set_rocrail_status("connected")
                         
             except Exception as e:
                 print(f"Protocol monitor error: {e}")
                 await asyncio.sleep(1)
                 
-            await asyncio.sleep(5.0)  # Check every 5 seconds
+            await asyncio.sleep(10.0)  # Check every 10 seconds (less frequent as auto-reconnect handles most cases)
             
     async def _memory_monitor_task(self):
         """Monitor memory usage"""

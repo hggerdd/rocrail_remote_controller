@@ -126,23 +126,33 @@ class AsyncNeoPixelController:
         await self._set_led(LED_WIFI, color)
         
     async def update_rocrail_status(self, status):
-        """Update RocRail status LED"""
+        """Update RocRail status LED with improved feedback"""
         await self._update_blink_state()
         
         if status == "connected":
-            # Solid green
+            # Solid bright green
             color = (0, self.LED_BRIGHT, 0)
         elif status == "connecting":
-            # Orange blinking
+            # Yellow blinking (initial connection)
             brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_LOW
-            color = (brightness, brightness//2, 0)
+            color = (brightness, brightness, 0)
         elif status == "reconnecting":
-            # Red-orange fast blinking
-            brightness = self.LED_BRIGHT if self._blink_state else self.LED_DIM_LOW
-            color = (brightness, brightness//3, 0)
+            # Orange fast blinking (attempting reconnection)
+            # Use faster blink for urgency
+            fast_blink = (time.ticks_ms() // 250) % 2
+            brightness = self.LED_BRIGHT if fast_blink else self.LED_DIM_LOW
+            color = (brightness, brightness//2, 0)
         elif status == "lost":
-            # Solid red
+            # Red fast blinking (connection lost, waiting to reconnect)
+            fast_blink = (time.ticks_ms() // 250) % 2
+            brightness = self.LED_BRIGHT if fast_blink else self.LED_DIM_LOW
+            color = (brightness, 0, 0)
+        elif status == "error":
+            # Solid red (error state)
             color = (self.LED_BRIGHT, 0, 0)
+        elif status == "failed":
+            # Dim red (permanent failure)
+            color = (self.LED_DIM_HIGH, 0, 0)
         else:
             # Off for disconnected/unknown
             color = (0, 0, 0)

@@ -65,6 +65,21 @@ New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces poll
    - **Solution**: Use `time.ticks_ms()` and `time.ticks_diff()`
    - **Files**: `lib/async_controllers/async_wifi.py`
 
+8. **"Send error: [Errno 128] ENOTCONN" on WiFi/connection loss**
+   - **Cause**: Socket errors not properly handled, no automatic reconnection
+   - **Solution**: Enhanced error handling with automatic reconnection using exponential backoff
+   - **Files**: `lib/async_controllers/async_protocol.py` - Added `_auto_reconnect()` method
+   - **Features**: 
+     - Detects ENOTCONN errors immediately in send/receive tasks
+     - Automatic reconnection with exponential backoff (1s, 2s, 5s, 10s, 30s)
+     - Prevents duplicate reconnection attempts
+     - Re-queries locomotives after successful reconnection
+   - **LED Feedback**: 
+     - Yellow blinking = initial connection
+     - Orange fast blink = reconnecting  
+     - Red fast blink = connection lost
+     - Bright green = connected
+
 **Prevention**: Run `python test_full_compatibility.py` before deployment to catch these issues early.
 
 ## AsyncIO Benefits
