@@ -6,7 +6,7 @@ Handles buttons, potentiometer with asyncio
 import asyncio
 import time
 from machine import Pin, ADC
-from hardware_config import **
+from hardware_config import *
 
 
 class AsyncHardwareManager:
