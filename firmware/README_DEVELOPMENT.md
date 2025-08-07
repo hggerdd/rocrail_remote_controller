@@ -26,6 +26,47 @@ New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces poll
 - Structured concurrency with proper resource cleanup
 - Eliminates timer-based polling loops
 
+## AsyncIO Implementation Issues Resolved
+
+**Critical Failures Encountered & Fixed:**
+
+1. **`Error running main rocrail_controller.py: Queue`**
+   - **Cause**: `asyncio.Queue` not available in MicroPython asyncio
+   - **Solution**: Replaced with `list + asyncio.Event` in `async_protocol.py`
+   - **Files**: `lib/async_controllers/async_protocol.py`
+
+2. **`'Stream' object has no attribute 'is_closing'`**
+   - **Cause**: MicroPython StreamWriter lacks `is_closing()` method
+   - **Solution**: Use `hasattr(writer, 'write')` for connection checks
+   - **Files**: `lib/async_controllers/async_protocol.py`
+
+3. **`StreamWriter.wait_closed()` compatibility**  
+   - **Cause**: Method may not exist in all MicroPython versions
+   - **Solution**: Wrapped with `hasattr()` check and try/except
+   - **Files**: `lib/async_controllers/async_protocol.py`
+
+4. **Buttons not working**
+   - **Cause**: Over-complex debouncing logic with multiple negations
+   - **Solution**: Simplified to direct 1→0 transition detection (pull-up)  
+   - **Files**: `lib/async_controllers/async_hardware.py`
+
+5. **Potentiometer limited range**
+   - **Cause**: Missing mechanical calibration (1310-2360 → 0-100 mapping)
+   - **Solution**: Added `_normalize_speed()` with proper calibration
+   - **Files**: `lib/async_controllers/async_hardware.py`
+
+6. **Event loop compatibility**
+   - **Cause**: `asyncio.run()` not available in older MicroPython
+   - **Solution**: Fallback to `get_event_loop().run_until_complete()`
+   - **Files**: `rocrail_controller_asyncio.py`
+
+7. **Time function compatibility**
+   - **Cause**: `time.time()` less precise than MicroPython alternatives
+   - **Solution**: Use `time.ticks_ms()` and `time.ticks_diff()`
+   - **Files**: `lib/async_controllers/async_wifi.py`
+
+**Prevention**: Run `python test_full_compatibility.py` before deployment to catch these issues early.
+
 ## AsyncIO Benefits
 
 **Structured Concurrency:**
@@ -46,15 +87,89 @@ New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces poll
 - Easier testing and debugging
 - Modular component design
 
-**MicroPython Compatibility:**
-- Uses list + asyncio.Event instead of asyncio.Queue (not available in MicroPython)
-- Compatible event loop handling with fallback for older MicroPython versions
-- Individual task monitoring instead of asyncio.gather()
-- Stream operations use hasattr() checks for MicroPython compatibility
-- writer.is_closing() → hasattr(writer, 'write') checks
-- writer.wait_closed() wrapped with compatibility checks
-- asyncio.wait_for() with fallback for basic open_connection()
-- All async operations tested for MicroPython compatibility
+**MicroPython AsyncIO Compatibility Issues & Solutions:**
+
+⚠️ **Common AsyncIO Pitfalls** - Issues encountered and solved in this implementation:
+
+1. **`asyncio.Queue` not available** → Use `list + asyncio.Event`
+   ```python
+   # ❌ Fails in MicroPython
+   queue = asyncio.Queue()
+   
+   # ✅ MicroPython compatible
+   queue = []
+   queue_event = asyncio.Event()
+   ```
+
+2. **`writer.is_closing()` method missing** → Use `hasattr()` checks
+   ```python
+   # ❌ Fails: 'Stream' object has no attribute 'is_closing'
+   if not writer.is_closing():
+   
+   # ✅ MicroPython compatible  
+   if writer and hasattr(writer, 'write'):
+   ```
+
+3. **`writer.wait_closed()` may not exist** → Wrap with compatibility check
+   ```python
+   # ✅ Safe approach
+   if hasattr(writer, 'wait_closed'):
+       try:
+           await writer.wait_closed()
+       except:
+           pass
+   ```
+
+4. **`asyncio.wait_for()` missing** → Add fallback
+   ```python
+   # ✅ With fallback
+   if hasattr(asyncio, 'wait_for'):
+       result = await asyncio.wait_for(operation(), timeout=10)
+   else:
+       result = await operation()  # No timeout
+   ```
+
+5. **`asyncio.gather()` unreliable** → Use individual task monitoring
+   ```python
+   # ❌ May fail with long-running tasks
+   await asyncio.gather(*tasks)
+   
+   # ✅ Individual monitoring
+   while tasks:
+       await asyncio.sleep(1)
+       # Check and handle completed tasks
+   ```
+
+6. **`asyncio.run()` not available** → Event loop fallback
+   ```python
+   # ✅ Compatible approach
+   if hasattr(asyncio, 'run'):
+       asyncio.run(main())
+   else:
+       loop = asyncio.get_event_loop()
+       loop.run_until_complete(main())
+   ```
+
+7. **Complex button debouncing fails** → Simplify logic
+   ```python
+   # ✅ Direct transition detection (pull-up)
+   if last_state == 1 and current_state == 0:
+       return True  # Button pressed
+   ```
+
+8. **Missing hardware calibration** → Always migrate hardware-specific code
+   - Potentiometer ranges, LED brightness, timing constants
+   - Don't assume linear mappings work for all hardware
+
+**Testing Strategy**: Always test with actual MicroPython before deployment:
+```bash
+python test_full_compatibility.py  # Comprehensive compatibility check
+```
+
+**📋 For Future AsyncIO Development**: 
+- `MICROPYTHON_ASYNCIO_CHECKLIST.md` - Complete compatibility checklist
+- `ASYNCIO_ISSUES_RESOLVED.md` - Summary of all issues fixed
+- Use these guides to prevent the same compatibility issues in future implementations
 
 **Testing:**
 ```python
