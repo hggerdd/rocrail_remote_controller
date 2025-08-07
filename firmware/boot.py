@@ -73,10 +73,10 @@ else:
     
     print("\n\nNormal startup - Running main program...")
     try:
-        import rocrail_controller
+        import rocrail_controller_asyncio
     except ImportError:
-        print("Error: rocrail_controller.py not found!")
-    
+        print("Error: rocrail_controller_asyncio.py not found!")
+
     except Exception as e:
         print(f"Error running main rocrail_controller.py: {e}")
 
