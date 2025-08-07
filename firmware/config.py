@@ -1,10 +1,6 @@
 # config.py - Application configuration settings
 # (Non-hardware settings from rocrail_config.py)
 
-# WiFi settings
-WIFI_SSID = "Bbox-328C6AED"
-WIFI_PASSWORD = "1DF9524DDC396399F7FD71C7F62E9A"
-
 # RocRail settings
 ROCRAIL_HOST = "192.168.1.27"
 ROCRAIL_PORT = 8051

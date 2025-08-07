@@ -52,7 +52,7 @@ class LocomotiveControllerAsync:
         await self.leds.initialize()
         
         # Connect WiFi
-        if await self.wifi.connect(WIFI_SSID, WIFI_PASSWORD):
+        if await self.wifi.connect():
             await self.state.set_wifi_status("connected")
         else:
             await self.state.set_wifi_status("failed")
