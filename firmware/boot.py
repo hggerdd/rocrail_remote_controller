@@ -25,7 +25,18 @@
 from machine import Pin
 import sys
 import time
-from hardware_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL
+from hardware_config import BTN_NOTHALT, BTN_RICHTUNGSWECHEL, NEOPIXEL_PIN, NEOPIXEL_COUNT
+from lib.neopixel_controller import NeoPixelController
+from hardware_config import LED_ROCRAIL
+
+# turn off all neopixels at startup
+np_ctrl = NeoPixelController(NEOPIXEL_PIN, NEOPIXEL_COUNT)
+np_ctrl.all_off()
+np_ctrl.refresh()
+
+# Set LED_ROCRAIL to orange (preliminary state)
+np_ctrl.set_led(LED_ROCRAIL, 255, 165, 0)  # Orange
+np_ctrl.refresh()
 
 # Configure your button pin (adjust pin number for your board)
 red_button   = Pin(BTN_NOTHALT, Pin.IN, Pin.PULL_UP)
@@ -36,7 +47,10 @@ time.sleep_ms(150)
 
 # Check if button is pressed (LOW when using pull-up)
 if not red_button.value():
-    
+    # Set LED_ROCRAIL to purple
+    np_ctrl.set_led(LED_ROCRAIL, 128, 0, 128)  # Purple
+    np_ctrl.refresh()
+
     print("\n\nRED Button pressed - Starting WiFi and rocrail configuration server...")
     time.sleep_ms(100)  # Debounce delay
     
@@ -51,6 +65,10 @@ if not red_button.value():
 elif not green_button.value():  # FIXED: war vorher red_button (Bug!)
     print("\n\nGreen Button pressed - Test program started")
 else:
+    # Set LED_ROCRAIL to green
+    np_ctrl.set_led(LED_ROCRAIL, 0, 255, 0)  # Green
+    np_ctrl.refresh()
+    
     print("\n\nNormal startup - Running main program...")
     try:
         import rocrail_controller
