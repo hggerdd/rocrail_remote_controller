@@ -62,8 +62,10 @@ if not red_button.value():
     except Exception as e:
         print(f"Error running config server: {e}")
         
-elif not green_button.value():  # FIXED: war vorher red_button (Bug!)
-    print("\n\nGreen Button pressed - Test program started")
+elif not green_button.value():  # Green button pressed at startup
+    print("\n\nGreen Button pressed - REPL open, no program started")
+    # Do nothing else, drop to REPL
+
 else:
     # Set LED_ROCRAIL to green
     np_ctrl.set_led(LED_ROCRAIL, 0, 255, 0)  # Green
