@@ -217,7 +217,7 @@ class AsyncNeoPixelController:
         for i in range(5):
             led_index = LED_LOCO_START + i
             await self._set_led(led_index, (0, 0, 100), force_update=True)
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.07)
             await self._set_led(led_index, (0, 0, 0), force_update=True)
             
         print("✓ LED startup complete - ready for status updates")

@@ -2,7 +2,7 @@
 # (Non-hardware settings from rocrail_config.py)
 
 # RocRail settings
-ROCRAIL_HOST = "192.168.1.27"
+ROCRAIL_HOST = "192.168.178.38"
 ROCRAIL_PORT = 8051
 
 # Default locomotive
