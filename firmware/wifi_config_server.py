@@ -660,58 +660,82 @@ class WiFiConfigAPI:
             return None, None, 0
     
     def stream_file_response(self, client, filepath, content_type, file_size):
-        """Stream file in chunks to avoid memory issues"""
+        """Stream file in chunks with robust connection handling"""
         try:
             # Log memory before transfer
             gc.collect()
             mem_free_start = gc.mem_free()
             print(f"Starting file transfer: {filepath} ({file_size} bytes), free memory: {mem_free_start} bytes")
             
+            # Set adaptive timeout based on file size
+            timeout = min(15, max(5, file_size // 1000))  # 5-15s based on file size
+            client.settimeout(timeout)
+            print(f"Set client timeout: {timeout}s for {file_size} bytes")
+            
             # Send HTTP headers first
             response_header = f"HTTP/1.1 200 OK\r\n"
             response_header += f"Content-Type: {content_type}\r\n"
             response_header += f"Content-Length: {file_size}\r\n"
-            response_header += "Cache-Control: max-age=86400\r\n"  # Cache for 1 day
+            response_header += "Cache-Control: max-age=3600\r\n"  # Reduced cache time
             response_header += "Connection: close\r\n\r\n"
             
-            client.send(response_header.encode())
+            # Verify client connection before sending headers
+            try:
+                client.send(response_header.encode())
+            except OSError as e:
+                print(f"Client disconnected before headers: {e}")
+                return False
             
-            # Stream file in 1KB chunks (binary mode for all files)
-            CHUNK_SIZE = 4096
+            # Stream file with smaller chunks for better responsiveness
+            CHUNK_SIZE = 1024  # Smaller chunks for better error detection
             bytes_sent = 0
+            consecutive_errors = 0
             
             with open(filepath, 'rb') as f:
                 while bytes_sent < file_size:
+                    # Check for connection before each chunk
+                    if consecutive_errors > 3:
+                        print(f"Too many consecutive send errors, aborting transfer")
+                        break
+                        
                     chunk = f.read(CHUNK_SIZE)
                     if not chunk:
                         break
                     
                     try:
-                        client.send(chunk)
+                        # Send chunk with immediate error detection
+                        sent = client.send(chunk)
+                        if sent == 0:  # Socket closed
+                            print(f"Socket closed by client at {bytes_sent}/{file_size} bytes")
+                            break
+                            
                         bytes_sent += len(chunk)
+                        consecutive_errors = 0  # Reset error count on success
                         
-                        # Update brightness during file transfer (every 8KB to avoid slowing transfer)
-                        if bytes_sent % (CHUNK_SIZE * 8) == 0:
+                        # Quick brightness update every 4KB 
+                        if bytes_sent % (CHUNK_SIZE * 4) == 0:
                             self.leds.read_brightness()
-                            # Garbage collect during large file transfers to free memory
-                            if file_size > 5000:
-                                gc.collect()
-                                # Show progress for large files
-                                if bytes_sent % (CHUNK_SIZE * 16) == 0:  # Every 16KB
-                                    print(f"Transfer progress: {bytes_sent}/{file_size} bytes ({int(bytes_sent/file_size*100)}%)")
                             
                     except OSError as e:
-                        if e.args[0] == 32:  # EPIPE - client disconnected
-                            print(f"Client disconnected during file transfer at {bytes_sent}/{file_size} bytes")
+                        consecutive_errors += 1
+                        if e.args[0] in [32, 104, 128]:  # EPIPE, ECONNRESET, ENOTCONN
+                            print(f"Client connection lost: {e.args[0]} at {bytes_sent}/{file_size} bytes")
                             break
+                        elif e.args[0] in [11, 110, 116]:  # EAGAIN, ETIMEDOUT  
+                            print(f"Send timeout/retry: {e.args[0]}, retrying...")
+                            time.sleep_ms(10)  # Brief pause before retry
+                            continue
                         else:
-                            raise e
+                            print(f"Unexpected send error: {e}")
+                            break
             
-            # Log completion
+            # Log final status
+            success = bytes_sent == file_size
+            status = "complete" if success else "incomplete" 
             gc.collect()
             mem_free_end = gc.mem_free()
-            print(f"File transfer complete: {bytes_sent}/{file_size} bytes, free memory: {mem_free_end} bytes")
-            return True
+            print(f"File transfer {status}: {bytes_sent}/{file_size} bytes, free memory: {mem_free_end} bytes")
+            return success
             
         except Exception as e:
             self._log_error(f"Failed to stream file: {filepath}", e)
@@ -789,8 +813,8 @@ class WiFiConfigAPI:
                 content_type, filepath, file_size = self.serve_file(filename)
                 
                 if filepath:
-                    # Set longer timeout for file transfers (especially for large files)
-                    timeout = 30 if file_size > 5000 else 15  # 30s for large files, 15s for small
+                    # Set adaptive timeout for file transfers
+                    timeout = min(10, max(3, file_size // 2000))  # 3-10s adaptive timeout
                     client.settimeout(timeout)
                     print(f"File transfer timeout set to {timeout}s for {file_size} byte file")
                     success = self.stream_file_response(client, filepath, content_type, file_size)

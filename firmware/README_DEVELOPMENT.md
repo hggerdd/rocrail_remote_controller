@@ -122,6 +122,12 @@ New asyncio-based implementation (`rocrail_controller_asyncio.py`) replaces poll
    - **Files**: `lib/async_controllers/async_leds.py`, `documentation/LED_RECOMMENDATIONS.py`
    - **Changes**: Reduced brightness (255→200), improved dim levels, multi-speed blinking
    - **Benefits**: Better battery life, improved contrast, urgency-based blink speeds
+
+12. **File Streaming Connection Errors** ✅ **RESOLVED**
+   - **Cause**: ECONNRESET/ENOTCONN during style.css transfer due to timeout conflicts
+   - **Solution**: Adaptive timeouts (3-10s), smaller chunks (1KB), connection validation  
+   - **Files**: `wifi_config_server.py` - `stream_file_response()` method
+   - **Result**: Robust file serving with proper error recovery and client disconnect handling
 2. **`writer.is_closing()` method missing** → Use `hasattr()` checks
    ```python
    # ❌ Fails: 'Stream' object has no attribute 'is_closing'
@@ -233,7 +239,15 @@ python test_asyncio.py
 
 ### Web Interface (`frontend/`)
 - `index.html`, `app.js`, `style.css` - Configuration web interface
-- `wifi_config_server.py` - Configuration mode web server
+- `wifi_config_server.py` - Configuration mode web server with **robust file streaming**
+
+**File Streaming Optimizations** (wifi_config_server.py):
+- **Adaptive Timeouts**: 3-10s based on file size vs. fixed 30s timeouts
+- **Small Chunks**: 1KB chunks for better connection error detection  
+- **Connection Validation**: Verify client connection before each chunk
+- **Error Recovery**: Handle ECONNRESET/ENOTCONN with consecutive error tracking
+- **Responsive LED Updates**: Brightness control during file transfers (every 4KB)
+- **Memory Optimization**: Garbage collection and progress monitoring
 
 ## Hardware Configuration
 
